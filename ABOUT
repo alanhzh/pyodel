@@ -1,0 +1,14 @@
+Pyodel is an e-learning multi-purpose tool for web2py that will allow
+e-learning general CRUD operations, make and perform student tests and
+qualifications, support class streaming with acces control, and document
+sharing with markmin.
+
+It is intended as a simple tool for schools and
+single courses, to interact as plugin with CMS projects or in standalone
+app mode.
+
+Copyright (C) 2011 Alan Etkin <spametki@gmail.com>
+
+Released under the terms of AGPLv3 license
+
+Developed with web2py.

@@ -1,0 +1,38 @@
+{{left_sidebar_enabled,right_sidebar_enabled=False,True}}
+{{extend 'layout.html'}}
+
+{{if 'message' in globals():}}
+<h3>{{=message}}</h3>
+{{pass}}
+{{=A(T("Study"), _href=URL("student.html"))}} | {{=A(T("Teach"), _href=URL("teacher.html"))}}
+<br />
+
+|&nbsp;
+{{for table in db:}}
+ {{=A(T(str(table)), _href=URL("select.html", args=[table,]))}} |
+{{pass}}
+
+{{=HR()}}
+{{=H3(T("Courses"))}}
+{{=SQLTABLE(courses, columns=["course.id",
+                              "course.code",
+                              "course.name",
+                              "course.by",
+                              "course.starts",
+                              "course.ends",
+                              "course.cost"], linkto="course")}}
+            
+{{#db.attendance[f].course.id}}
+            
+{{=H3(T("Current exams"))}}
+{{=UL(*[LI(A(hourglass.quiz.name, _href=URL(f="quiz", args=["hourglass", hourglass.id]))) for hourglass in hourglasses])}}
+{{=H3(T("Pending works"))}}
+{{=UL(*[LI(work) for work in deadlines])}}
+{{=HR()}}
+
+{{=A(T("Complete course list"), _href=URL(f="courses"))}}
+
+{{block right_sidebar}}
+{{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='button',
+     _style='margin-top: 1em;')}}
+{{end}}
