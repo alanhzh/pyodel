@@ -241,7 +241,11 @@ db.define_table("plugin_pyodel_gradebook",
                       "list:reference plugin_pyodel_instance"), # which instances to show/compute
                 Field("student", "reference auth_user"),
                 Field("remarks", "text"),
-                format="%(student)s")
+                # format="%(student)s"
+                format=lambda r: "%s %s (%s)" % \
+                (db.auth_user[r.student].first_name,
+                db.auth_user[r.student].last_name,
+                r.student))
 
 # gradebook entries for filling a gradebook grid
 db.define_table("plugin_pyodel_grade",
