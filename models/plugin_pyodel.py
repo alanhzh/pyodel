@@ -26,6 +26,40 @@ db.auth_group.update_or_insert(role="editor",
 description="Can edit documents")
 """
 
+"""
+# Quiz syntax:
+# Quiz instructions are interpreted by line (line-breaks terminate them).
+# Note that answers will appear in the given order unless sh: (for shuffle)
+# is added to each question group:
+
+q: The actual question goes here. Ok?
+c: C stands for correct answer (I guess)
+i: I'm afraid this is an incorrect answer
+i: This too is wrong
+i: Another one
+s: 1.232 # score for this question
+m: # for allowing multiple answers
+sh: # add this so the answers are mixed
+
+q: Here's another question. ¿What about it?
+c: ...
+i: ...
+"""
+
+import random
+import datetime
+
+
+##################################################################
+################## Plugin style configuration ####################
+##################################################################
+
+if not request.extension == "load":
+    response.files.append(URL(c="static", f="plugin_pyodel/style.css"))
+
+##################################################################
+################## Plugin static values sets #####################
+##################################################################
 
 PLUGIN_PYODEL_MARKMIN_COMMENT=T("Use MARKMIN or plain text")
 PLUGIN_PYODEL_UPPERCASE_ALPHABET = ["A", "B", "C", "D", "E",
@@ -35,243 +69,133 @@ PLUGIN_PYODEL_UPPERCASE_ALPHABET = ["A", "B", "C", "D", "E",
                                     "U", "V", "W", "X", "Y",
                                     "Z"]
 
-db.define_table("plugin_pyodel_stream",
-                Field("live", "boolean", default=False),
-                Field("name"),
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT),
-                # embedded html code
-                Field("html", "text",
-                comment=T("The html code for embedding the video")),
-                Field("starts", "datetime"),
-                Field("ends", "datetime"),
-                Field("tags", "list:string"),
-                format="%(name)s"
-                )
 
-# the whole course
-db.define_table("plugin_pyodel_course",
-                Field("subject"),
-                Field("active", "boolean", default=False),
-                Field("template", "boolean", default=False),
-                Field("code"),
-                Field("abbreviation"),
-                Field("name"),
-                Field("streams", "list:reference stream"),
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("by", "list:reference auth_user"),
-                Field("starts", "datetime"),
-                Field("documents",
-                      "list:reference plugin_wiki_page"), # STATIC PAGES
-                Field("ends", "datetime"),
-                Field("tags", "list:string"),
-                Field("cost", "double", default=0.0),
-                format="%(name)s")
+##################################################################
+################## Plugin basic functions ########################
+##################################################################
 
-# one session
-db.define_table("plugin_pyodel_lecture",
-                Field("template", "boolean", default=False),
-                Field("chapter", "integer"),
-                Field("name"),
-                Field("course",
-                      "reference plugin_pyodel_course"),
-                Field("streams",
-                      "list:reference plugin_pyodel_stream"),
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("by", "list:reference auth_user"),
-                Field("documents", "list:reference plugin_wiki_page"),
-                Field("tags", "list:string"),
-                format="%(name)s")
+def plugin_pyodel_set_quiz(data, deadline=True):
+    """ Update a sandglass from session from quiz data."""
 
-db.define_table("plugin_pyodel_attendance",
-                Field("student", "reference auth_user",
-                default=auth.user_id),
-                Field("course", "reference plugin_pyodel_course"),
-                Field("paid", "double", default=0.0),
-                Field("allowed", "boolean", default=False),
-                Field("passed", default=False),
-                Field("score", "double", default=0.0),
-                format="%(student)s"
-                )
+    sandglass = db.plugin_pyodel_sandglass[data["sandglass"]]
+    total = 0.0
+    answers = set()
+    quiz_score = sandglass.quiz.score
+    questions = len(data["questions"])
+    if quiz_score is None:
+      quiz_score = 0.0
+    score_per_question = quiz_score/questions
 
-db.define_table("plugin_pyodel_task",
-                Field("template", "boolean", default=False),
-                Field("name"),
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("documents",
-                "list:reference plugin_wiki_page"),
-                Field("tags", "list:string"),
-                Field("points", "double", default=0.0),
-                format="%(name)s")
+    if deadline:
+        if sandglass.ends < request.now:
+            raise HTTP(500, T("Quiz timed out"))
 
-db.define_table("plugin_pyodel_answer",
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("tags", "list:string"),
-                format="%(body)s"
-                )
+    for q, question in data["questions"].iteritems():
+        complete = 1
+        checked = 0
+        if question["multiple"]:
+            # count total correct items
+            complete = len([x for x in question["answers"] \
+                            if question["answers"][x]["correct"]])
+        if question["score"]:
+            score = score/complete
+        else:
+            score = score_per_question/complete
+        for a, answer in question["answers"].iteritems():
+            if a in question["marked"]:
+                answers.add("%s:%s" % (q, a))
+                if (question["multiple"] in (None, False)) and \
+                (checked > 1):
+                    break
+                if answer["correct"]:
+                    total += score
+                checked += 1
+    sandglass.update_record(score=total,
+                            answers=list(answers))
 
-# Question can be multiple choice or not, or even an exercise,
-# in which case it will probably not be an actual question
-db.define_table("plugin_pyodel_question",
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("tags", "list:string"),
-                Field("points", "double", default=0.0),
-                Field("answers",
-                      "list:reference plugin_pyodel_answer"),
-                Field("correct",
-                      "list:reference plugin_pyodel_answer",
-                readable=False),
-                Field("shuffle", "boolean", default=False),
-                format="%(body)s"
-                )
 
-db.define_table("plugin_pyodel_test",
-                Field("template", "boolean", default=False),
-                Field("duration", "time"),
-                Field("questions",
-                      "list:reference plugin_pyodel_question"),
-                Field("name"),
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("tags", "list:string"),
-                Field("shuffle", "boolean", default=False),
-                format="%(name)s"
-                )
+def plugin_pyodel_get_quiz(sandglass_id):
+    """ Returns a dict with quiz data.
 
-db.define_table("plugin_pyodel_quiz",
-                Field("body", "text"), # use quiz syntax
-                Field("name"),
-                Field("description"),
-                Field("tags", "list:string"),
-                format="%(name)s")
+    Structure:
+    data -> questions <int question> -> question
+                                     -> answers -> <int answer> -> answer
+                                     -> score                   -> correct
+                                     -> marked <answer set>     -> score
+                                     -> shuffle
+                                     -> multiple
+                                     -> order <list answers>
+         -> current <int question>
+         -> order <list questions>
+         -> sandglass <int id>
+    """
+    
+    sandglass = db.plugin_pyodel_sandglass[int(sandglass_id)]
+    quiz = sandglass.quiz
+    body = quiz.body
+    data = dict(questions=dict(),
+                current=None,
+                order=[],
+                sandglass=sandglass.id)
+    answers = dict()
 
-# gradebook examination super-instances
-# i.e. first midterm, second exam, final exam, ...
-db.define_table("plugin_pyodel_instance",
-                Field("name"),
-                Field("abbreviation"),
-                Field("ordered"), # A to Z (for spreadsheets)
-                format="%(name)s"
-                )
+    if sandglass.answers is not None:
+        for answer in sandglass.answers:
+            values = answer.split(":")
+            q, a = int(values[0]), int(values[1])
+            if not q in answers:
+                answers[q] = set()
+            answers[q].add(a)
 
-db.define_table("plugin_pyodel_evaluation",
-                Field("template", "boolean", default=False),
-                Field("name"),
-                Field("code"), # a letter or other identifier
-                Field("description", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("instance", "reference plugin_pyodel_instance"),
-                Field("course",
-                      "reference plugin_pyodel_course"),
-                Field("lectures",
-                      "list:reference plugin_pyodel_lecture"),
-                Field("starts", "datetime"),
-                Field("ends", "datetime"),
-                Field("students",
-                      "list:reference plugin_pyodel_attendance"),
-                Field("evaluators",
-                      "list:reference auth_user"),
-                Field("tests", "list:reference plugin_pyodel_test"),
-                Field("quizzes", "list:reference plugin_pyodel_quiz"),
-                Field("score", "double", default=0.0),
-                Field("tags", "list:string"),
-                Field("tasks", "list:reference plugin_pyodel_task"),
-                format="%(name)s")
+    question = 0
+    answer = 0
 
-# Student's task work
-db.define_table("plugin_pyodel_work",
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
-                Field("task", "reference plugin_pyodel_task"),
-                Field("starts", "datetime"),
-                Field("ends", "datetime"),
-                Field("evaluation",
-                      "reference plugin_pyodel_evaluation"),
-                Field("documents",
-                "list:reference plugin_wiki_page"),
-                Field("points", "double", default=0.0),
-                Field("score", "double", default=0.0),
-                format="%(task)s"
-                )
+    for i, row in enumerate(body.splitlines()):
+        string = row.strip()
+        text = string[2:].strip()
+        if string.startswith("q:"):
+            question += 1
+            data["order"].append(question)
+            answer = 0
+            data["questions"][question] = dict(shuffle=False,
+                                               question=text,
+                                               score=None,
+                                               answers=dict(),
+                                               marked=set(),
+                                               multiple=False,
+                                               exact=False,
+                                               order=[])
+            shuffle = False
+        elif string.startswith("sh:"):
+            data["questions"][question]["shuffle"] = True
+        elif string.startswith("c:") or string.startswith("i:"):
+            answer += 1
+            data["questions"][question]["order"].append(answer)
+            correct = True
+            if string.startswith("i:"):
+                correct = False
+            data["questions"][question]["answers"][answer] = \
+            dict(answer=text, correct=correct)
+            if question in answers:
+                if answer in answers[question]:
+                    data["questions"][question]["marked"].add(answer)
+        elif string.startswith("sh:"):
+            data["questions"][question]["shuffle"] = True
+        elif string.startswith("s:"):
+            data["questions"][question]["score"] = \
+            float(text)
+        elif string.startswith("m:"):
+            data["questions"][question]["multiple"] = True
 
-# A timer for a test
-db.define_table("plugin_pyodel_hourglass",
-                Field("test", "reference plugin_pyodel_test"),
-                Field("starts", "datetime"),
-                Field("ends", "datetime"),
-                Field("evaluation",
-                      "reference plugin_pyodel_evaluation"),
-                Field("score", "double", default=0.0),
-                format="%(test)s")
+    if quiz.shuffle == True:
+        random.shuffle(data["order"])
 
-# A timer for a quiz
-db.define_table("plugin_pyodel_sandglass",
-                Field("quiz", "reference plugin_pyodel_quiz"),
-                Field("starts", "datetime"),
-                Field("ends", "datetime"),
-                Field("evaluation",
-                      "reference plugin_pyodel_evaluation"),
-                Field("score", "double", default=0.0),
-                format="%(quiz)s")
+    for question, value in data["questions"].iteritems():
+        if value["shuffle"] == True:
+            random.shuffle(value["order"])
 
-# A student's evaluation answer (can refer to an option
-# or be redacted).
-db.define_table("plugin_pyodel_retort",
-                Field("hourglass",
-                      "reference plugin_pyodel_hourglass"),
-                Field("question",
-                      "reference plugin_pyodel_question"),
-                Field("answers",
-                      "list:reference plugin_pyodel_answer"),
-                # MARKMIN
-                Field("body", "text",
-                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT),
-                Field("score", "double", default=0.0),
-                format="%(answers)s"
-               )
+    return data
 
-# gradebooks
-db.define_table("plugin_pyodel_gradebook",
-                Field("instances",
-                      "list:reference plugin_pyodel_instance"), # which instances to show/compute
-                Field("student", "reference auth_user"),
-                Field("remarks", "text"),
-                # format="%(student)s"
-                format=lambda r: "%s %s (%s)" % \
-                (db.auth_user[r.student].first_name,
-                db.auth_user[r.student].last_name,
-                r.student))
-
-# gradebook entries for filling a gradebook grid
-db.define_table("plugin_pyodel_grade",
-                Field("gradebook",
-                      "reference plugin_pyodel_gradebook"),
-                Field("score"), # A D, 10, 100%, Good , ...
-                                # used for all course score
-                Field("course",
-                      "reference plugin_pyodel_course"),  # if not null,
-                                                         # should override code,
-                                                         # subject, name ...
-                Field("signed", "datetime"),
-                Field("authority",
-                      "reference auth_user"),
-                Field("instance",
-                      "reference plugin_pyodel_instance"), # exam,
-                                                           # practical work/activity.
-                Field("signature", "upload"), # the authority signature copy
-                Field("remarks", "text"),
-                Field("formula"), # spreadsheet syntax (web2py spreadsheet.py)
-                                  # references are plugin_pyodel_instance.abbreviation fields
-                                  # i.e.: =fme+sme/2
-                format="%(name)s"
-                )
-
-###################################################################
 
 def plugin_pyodel_show_markmin(value, row):
     if request.function == "select" and request.args(1) is None:
@@ -341,6 +265,7 @@ def plugin_pyodel_configure_model():
     db.plugin_pyodel_course.code.requires = \
     IS_NOT_IN_DB(db, db.plugin_pyodel_course.code)
 
+
 # This code was extracted from the following site:
 # http://codereview.stackexchange.com/questions/5091/
 # python-function-to-convert-roman-numerals-to-integers
@@ -374,3 +299,246 @@ def plugin_pyodel_rom_to_int(string):
                 else: continueyes=False
             else: continueyes=False
     return returnint
+
+
+##################################################################
+################## Plugin table definitions ######################
+##################################################################
+
+db.define_table("plugin_pyodel_stream",
+                Field("live", "boolean", default=False),
+                Field("name"),
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT),
+                # embedded html code
+                Field("html", "text",
+                comment=T("The html code for embedding the video")),
+                Field("starts", "datetime"),
+                Field("ends", "datetime"),
+                Field("tags", "list:string"),
+                format="%(name)s"
+                )
+
+# the whole course
+db.define_table("plugin_pyodel_course",
+                Field("subject"),
+                Field("active", "boolean", default=False),
+                Field("template", "boolean", default=False),
+                Field("code"),
+                Field("abbreviation"),
+                Field("name"),
+                Field("streams", "list:reference stream"),
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("by", "list:reference auth_user"),
+                Field("starts", "datetime"),
+                Field("documents",
+                      "list:reference plugin_wiki_page"), # STATIC PAGES
+                Field("ends", "datetime"),
+                Field("tags", "list:string"),
+                Field("cost", "double", default=0.0),
+                format="%(name)s")
+
+# one session
+db.define_table("plugin_pyodel_lecture",
+                Field("template", "boolean", default=False),
+                Field("chapter", "integer"),
+                Field("name"),
+                Field("course",
+                      "reference plugin_pyodel_course"),
+                Field("streams",
+                      "list:reference plugin_pyodel_stream"),
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("by", "list:reference auth_user"),
+                Field("documents", "list:reference plugin_wiki_page"),
+                Field("tags", "list:string"),
+                format="%(name)s")
+
+db.define_table("plugin_pyodel_attendance",
+                Field("student", "reference auth_user",
+                default=auth.user_id),
+                Field("course", "reference plugin_pyodel_course"),
+                Field("paid", "double", default=0.0),
+                Field("allowed", "boolean", default=False),
+                Field("passed", default=False),
+                Field("score", "double"),
+                format="%(student)s"
+                )
+
+db.define_table("plugin_pyodel_task",
+                Field("template", "boolean", default=False),
+                Field("name"),
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("documents",
+                "list:reference plugin_wiki_page"),
+                Field("tags", "list:string"),
+                Field("score", "double"),
+                format="%(name)s")
+
+db.define_table("plugin_pyodel_answer",
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("tags", "list:string"),
+                format="%(body)s"
+                )
+
+# Question can be multiple choice or not, or even an exercise,
+# in which case it will probably not be an actual question
+db.define_table("plugin_pyodel_question",
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("tags", "list:string"),
+                Field("score", "double"),
+                Field("answers",
+                      "list:reference plugin_pyodel_answer"),
+                Field("correct",
+                      "list:reference plugin_pyodel_answer",
+                readable=False),
+                Field("shuffle", "boolean", default=False),
+                format="%(body)s"
+                )
+
+db.define_table("plugin_pyodel_test",
+                Field("template", "boolean", default=False),
+                Field("duration", "time"),
+                Field("questions",
+                      "list:reference plugin_pyodel_question"),
+                Field("name"),
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("tags", "list:string"),
+                Field("shuffle", "boolean", default=False),
+                format="%(name)s"
+                )
+
+db.define_table("plugin_pyodel_quiz",
+                Field("body", "text"), # use quiz syntax
+                Field("name"),
+                Field("description"),
+                Field("tags", "list:string"),
+                Field("shuffle", "boolean"), # will mix questions, not answers
+                Field("score", "double"),
+                format="%(name)s")
+
+# gradebook examination super-instances
+# i.e. first midterm, second exam, final exam, ...
+db.define_table("plugin_pyodel_instance",
+                Field("name"),
+                Field("abbreviation"),
+                Field("ordered"), # A to Z (for spreadsheets)
+                format="%(name)s"
+                )
+
+db.define_table("plugin_pyodel_evaluation",
+                Field("template", "boolean", default=False),
+                Field("name"),
+                Field("code"), # a letter or other identifier
+                Field("description", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("instance", "reference plugin_pyodel_instance"),
+                Field("course",
+                      "reference plugin_pyodel_course"),
+                Field("lectures",
+                      "list:reference plugin_pyodel_lecture"),
+                Field("starts", "datetime"),
+                Field("ends", "datetime"),
+                Field("students",
+                      "list:reference plugin_pyodel_attendance"),
+                Field("evaluators",
+                      "list:reference auth_user"),
+                Field("tests", "list:reference plugin_pyodel_test"),
+                Field("quizzes", "list:reference plugin_pyodel_quiz"),
+                Field("score", "double"),
+                Field("tags", "list:string"),
+                Field("tasks", "list:reference plugin_pyodel_task"),
+                format="%(name)s")
+
+# Student's task work
+db.define_table("plugin_pyodel_work",
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
+                Field("task", "reference plugin_pyodel_task"),
+                Field("starts", "datetime"),
+                Field("ends", "datetime"),
+                Field("evaluation",
+                      "reference plugin_pyodel_evaluation"),
+                Field("documents",
+                "list:reference plugin_wiki_page"),
+                Field("score", "double"),
+                format="%(task)s"
+                )
+
+# A timer for a test
+db.define_table("plugin_pyodel_hourglass",
+                Field("test", "reference plugin_pyodel_test"),
+                Field("starts", "datetime"),
+                Field("ends", "datetime"),
+                Field("evaluation",
+                      "reference plugin_pyodel_evaluation"),
+                #Field("score", "double"),
+                format="%(test)s")
+
+# A timer for a quiz
+db.define_table("plugin_pyodel_sandglass",
+                Field("quiz", "reference plugin_pyodel_quiz"),
+                Field("starts", "datetime"),
+                Field("ends", "datetime"),
+                Field("evaluation",
+                      "reference plugin_pyodel_evaluation"),
+                Field("score", "double"),
+                Field("answers", "list:string"), # <int question>:<int answer> pairs
+                format="%(quiz)s")
+
+# A student's evaluation answer (can refer to an option
+# or be redacted).
+db.define_table("plugin_pyodel_retort",
+                Field("hourglass",
+                      "reference plugin_pyodel_hourglass"),
+                Field("question",
+                      "reference plugin_pyodel_question"),
+                Field("answers",
+                      "list:reference plugin_pyodel_answer"),
+                # MARKMIN
+                Field("body", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT),
+                Field("score", "double"),
+                format="%(answers)s"
+               )
+
+# gradebooks
+db.define_table("plugin_pyodel_gradebook",
+                Field("instances",
+                      "list:reference plugin_pyodel_instance"), # which instances to show/compute
+                Field("student", "reference auth_user"),
+                Field("remarks", "text"),
+                # format="%(student)s"
+                format=lambda r: "%s %s (%s)" % \
+                (db.auth_user[r.student].first_name,
+                db.auth_user[r.student].last_name,
+                r.student))
+
+# gradebook entries for filling a gradebook grid
+db.define_table("plugin_pyodel_grade",
+                Field("gradebook",
+                      "reference plugin_pyodel_gradebook"),
+                Field("score"), # A D, 10, 100%, Good , ...
+                                # used for all course score
+                Field("course",
+                      "reference plugin_pyodel_course"),  # if not null,
+                                                         # should override code,
+                                                         # subject, name ...
+                Field("signed", "datetime"),
+                Field("authority",
+                      "reference auth_user"),
+                Field("instance",
+                      "reference plugin_pyodel_instance"), # exam,
+                                                           # practical work/activity.
+                Field("signature", "upload"), # the authority signature copy
+                Field("remarks", "text"),
+                Field("formula"), # spreadsheet syntax (web2py spreadsheet.py)
+                                  # references are plugin_pyodel_instance.abbreviation fields
+                                  # i.e.: =fme+sme/2
+                format="%(name)s"
+                )

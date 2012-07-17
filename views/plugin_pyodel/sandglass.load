@@ -1,0 +1,40 @@
+{{if result is not None:}}
+  {{=H3(T("Done"))}}
+  {{=result}}
+{{else:}}
+  {{=H3(question["question"])}}
+  {{if script is not None:}}
+    {{=script}}
+  {{else:}}
+    {{=form}}
+    {{=SCRIPT("""
+    // Set the component name for the form processing action
+    var plugin_pyodel_sandglass_form_container = jQuery("#plugin_pyodel_sandglass_form").parent().attr("id");
+    function plugin_pyodel_sandglass_form_load(url){
+      jQuery(plugin_pyodel_sandglass_form_container).html("%(loading)s");
+      web2py_component(url, plugin_pyodel_sandglass_form_container);
+    }
+    """ % dict(loading=T("loading..."), current=data["current"]))}}
+    {{plugin_pyodel_sandglass_form_question_buttons = list()}}
+    {{for x, question in enumerate(data["order"]):}}
+      {{url = URL(c="plugin_pyodel",
+                  f="sandglass.load",
+                  args=["sandglass",
+                  data["sandglass"],
+                  "question",
+                  question])}}
+      {{if question == data["current"]:}}
+        {{print "found matching question/button", question}}
+        {{button_class = "plugin_pyodel_current"}}
+      {{else:}}
+        {{button_class = ""}}
+      {{pass}}
+      {{plugin_pyodel_sandglass_form_question_buttons.append(SPAN(INPUT(_type="button",
+                                                                        _value=x+1,
+                                                                        _onclick="plugin_pyodel_sandglass_form_load('%(url)s');" % dict(url=url),
+                                                                        _id="plugin_pyodel_sandglass_button_%s" % question,
+                                                                        _class=button_class)))}}
+    {{pass}}
+    {{=DIV(*plugin_pyodel_sandglass_form_question_buttons)}}
+  {{pass}}
+{{pass}}

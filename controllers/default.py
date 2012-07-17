@@ -107,20 +107,20 @@ def manager():
 @auth.requires_login()
 def student():
     # attendance
-    attendances = db(db.attendance.student == auth.user_id).select()
-    courses_query = db.course.id < 0
+    attendances = db(db.plugin_pyodel_attendance.student == auth.user_id).select()
+    courses_query = db.plugin_pyodel_course.id < 0
     for attendance in attendances:
-        courses_query |= db.course.id == attendance.course.id
+        courses_query |= db.plugin_pyodel_course.id == attendance.course.id
     courses = db(courses_query).select()
     hourglasses = []
     deadlines = []
     for attendee in attendances:
-        for row in db((db.hourglass.evaluation == db.evaluation.id) & \
-                      (db.evaluation.students.contains(attendee.id))).select():
+        for row in db((db.plugin_pyodel_hourglass.evaluation == db.plugin_pyodel_evaluation.id) & \
+                      (db.plugin_pyodel_evaluation.students.contains(attendee.id))).select():
             hourglasses.append(row.hourglass)
         # retrieve deadlines and hourglasses
-        for row in db((db.work.evaluation == db.evaluation.id) & \
-                      (db.evaluation.students.contains(attendee.id))).select():
+        for row in db((db.plugin_pyodel_work.evaluation == db.plugin_pyodel_evaluation.id) & \
+                      (db.plugin_pyodel_evaluation.students.contains(attendee.id))).select():
             deadlines.append(row.work)
     return dict(courses=courses, hourglasses=hourglasses, deadlines=deadlines)
 
@@ -171,7 +171,7 @@ def evaluate():
     # a given evaluation
     evaluation = int(request.args(1))
     quiz = int(request.args(3))
-    hourglass = db.hourglass.insert(evaluation=evaluation,
+    hourglass = db.plugin_pyodel_hourglass.insert(evaluation=evaluation,
                                     quiz=quiz,
                                     starts=request.now,
                                     ends=request.now + \
@@ -181,17 +181,17 @@ def evaluate():
                   H5(SPAN(T("You can start it")),
                      SPAN(A(T("here"),
                             _href=URL(f="quiz",
-                                      args=["hourglass",
+                                      args=["plugin_pyodel_hourglass",
                                             hourglass])))))
     return dict(message=message)
 
 def evaluation():
-    evaluation = db.evaluation[request.args(1)]
+    evaluation = db.plugin_pyodel_evaluation[request.args(1)]
     quizes = UL(*[LI(A(quiz.name,
                        _href=URL(f="evaluate",
-                                 args=["evaluation",
+                                 args=["plugin_pyodel_evaluation",
                                        evaluation.id,
-                                       "quiz",
+                                       "plugin_pyodel_quiz",
                                        quiz.id]
                                 )
                        )) for quiz in evaluation.quizes])
@@ -201,27 +201,27 @@ def evaluation():
 def quiz():
     # quiz panel:
     # quiz data
-    hourglass = db.hourglass[int(request.args(1))]
+    hourglass = db.plugin_pyodel_hourglass[int(request.args(1))]
     quiz = hourglass.quiz
     # show time
     # questions list (show answer if any)
     # link to answer edition
-    questions_query = db.question.id == 0
+    questions_query = db.plugin_pyodel_question.id == 0
     for question in quiz.questions:
-        questions_query |= db.question.id == question
+        questions_query |= db.plugin_pyodel_question.id == question
     questions = SQLTABLE(db(questions_query).select(),
                          linkto=lambda field, type, ref: \
                          URL(f="answer",
-                             args=["hourglass",
+                             args=["plugin_pyodel_hourglass",
                                    hourglass.id,
-                                   "question",
+                                   "plugin_pyodel_question",
                                    field]))
     retorts = hourglass.retort.select()
     if hourglass.ends > request.now:
         left = LOAD(c="default",
                           f="left",
                           extension="load",
-                          args=["hourglass", hourglass.id],
+                          args=["plugin_pyodel_hourglass", hourglass.id],
                           timeout=10000,
                           ajax=True,
                           times="infinity")
@@ -249,9 +249,9 @@ def quiz_wizard():
                                         "tags": set()})
     if request.args(0) is None:
         message = T("Start: choose a template")
-        form = SQLFORM.factory(Field("template", "reference quiz",
-                                    requires = IS_EMPTY_OR(IS_IN_DB(db(db.quiz.template == True),
-                                             db.quiz.id, "%(name)s")),
+        form = SQLFORM.factory(Field("template", "reference plugin_pyodel_quiz",
+                                    requires = IS_EMPTY_OR(IS_IN_DB(db(db.plugin_pyodel_quiz.template == True),
+                                             db.plugin_pyodel_quiz.id, "%(name)s")),
                                              comment=T("Choose a template or leave blank for new")),
                                Field("tags", "list:string", comment=T("Insert tags (Enter adds a new tag)")))
         if form.process().accepted:
@@ -273,20 +273,20 @@ def quiz_wizard():
         tags_query = None
         for x, tag in enumerate(session.quiz["tags"]):
             if x == 0:
-                tags_query = db.question.tags.contains(tag)
+                tags_query = db.plugin_pyodel_question.tags.contains(tag)
             else:
-                tags_query |= db.question.tags.contains(tag)
+                tags_query |= db.plugin_pyodel_question.tags.contains(tag)
 
         if tags_query is not None:
-            db.quiz.questions.requires = IS_IN_DB(db(tags_query),
-                                                      db.question.id,
+            db.plugin_pyodel_quiz.questions.requires = IS_IN_DB(db(tags_query),
+                                                      db.plugin_pyodel_question.id,
                                                       "%(body)s",
                                                       multiple=True)
 
-        db.quiz.tags.writable = False
-        db.quiz.tags.readable = False
+        db.plugin_pyodel_quiz.tags.writable = False
+        db.plugin_pyodel_quiz.tags.readable = False
 
-        form = SQLFORM.factory(db.quiz,
+        form = SQLFORM.factory(db.plugin_pyodel_quiz,
                                Field("new_questions",
                                      "integer",
                                      default=0,
@@ -303,9 +303,9 @@ def quiz_wizard():
                                ))
         previous = None
         if session.quiz["quiz"]:
-            previous = db.quiz[session.quiz["quiz"]]
+            previous = db.plugin_pyodel_quiz[session.quiz["quiz"]]
         elif session.quiz["template"]:
-            previous = db.quiz[session.quiz["template"]]
+            previous = db.plugin_pyodel_quiz[session.quiz["template"]]
         if previous is not None:
             form.vars.body = previous.body
 
@@ -345,9 +345,9 @@ def quiz_wizard():
                         phrases = [words,]
                     for x, phrase in enumerate(phrases):
                         if x == 0:
-                            myquery = db.question.tags.contains(phrase)
+                            myquery = db.plugin_pyodel_question.tags.contains(phrase)
                         else:
-                            myquery |= db.question.tags.contains(phrase)
+                            myquery |= db.plugin_pyodel_question.tags.contains(phrase)
                     myrows = db(myquery).select(orderby="<random>")
                     for x, row in enumerate(myrows):
                         if x < number:
@@ -383,7 +383,7 @@ def quiz_wizard():
                 if session.quiz["quiz"]:
                     previous.update_record(tags=tags, **form.vars)
                 else:
-                    session.quiz["quiz"] = db.quiz.insert(tags=tags, **form.vars)
+                    session.quiz["quiz"] = db.plugin_pyodel_quiz.insert(tags=tags, **form.vars)
 
                 session.quiz["new_questions"] = new_questions
                 if not new_questions:
@@ -394,18 +394,18 @@ def quiz_wizard():
         # no answers means need of redacted retort
         message = T("Second stage: type questions")
         question_fields = []
-        quiz = db.quiz[session.quiz["quiz"]]
+        quiz = db.plugin_pyodel_quiz[session.quiz["quiz"]]
 
-        answers_query = db.answer
+        answers_query = db.plugin_pyodel_answer
 
         tags = None
         if not quiz.tags == []:
             tags = quiz.tags
             for x, tag in enumerate(tags):
                 if x == 0:
-                    answers_query = db.answer.tags.contains(tag)
+                    answers_query = db.plugin_pyodel_answer.tags.contains(tag)
                 else:
-                    answers_query |= db.answer.tags.contains(tag)
+                    answers_query |= db.plugin_pyodel_answer.tags.contains(tag)
 
         for x in range(session.quiz["new_questions"]):
             x += 1
@@ -422,7 +422,7 @@ def quiz_wizard():
             question_fields.append(Field("question_%s_answers" % x,
                                           "list:reference answer",
                                           requires=IS_IN_DB(db(answers_query),
-                                          db.answer.id,
+                                          db.plugin_pyodel_answer.id,
                                           "%(body)s",
                                           multiple=True),
                                           label=T("Answers")))
@@ -449,7 +449,7 @@ def quiz_wizard():
                     shuffle = request.vars["question_%s_shuffle" % number]
                     answers = request.vars["question_%s_answers" % number]
 
-                    question = db.question.insert(body=request.vars[k],
+                    question = db.plugin_pyodel_question.insert(body=request.vars[k],
                                                   tags=tags,
                                                   shuffle=shuffle,
                                                   answers=answers)
@@ -467,7 +467,7 @@ def quiz_wizard():
             redirect(URL(f="quiz", args=["third",]))
 
     elif request.args(0) == "third":
-        quiz = db.quiz[session.quiz["quiz"]]
+        quiz = db.plugin_pyodel_quiz[session.quiz["quiz"]]
         # type answers in
         message = T("Third stage: type answers")
         answer_fields = []
@@ -476,7 +476,7 @@ def quiz_wizard():
         else:
             tags = quiz.tags
         for k, v in session.quiz["new_answers"].iteritems():
-            question = db.question[k]
+            question = db.plugin_pyodel_question[k]
             v = int(v)
             if v > 0:
                 answer_fields.append(Field("question_%s" % k,
@@ -504,7 +504,7 @@ def quiz_wizard():
             for k in request.vars:
                 if k.startswith("answer_") and k.endswith("body"):
                     question, answer = int(k.split("_")[1]), int(k.split("_")[2])
-                    question = db.question[question]
+                    question = db.plugin_pyodel_question[question]
 
                     if not answers.has_key(question.id):
                         answers[question.id] = set()
@@ -522,13 +522,13 @@ def quiz_wizard():
                         data[question.id].append((body, tags))
 
             for k, v in data.iteritems():
-                question = db.question[k]
+                question = db.plugin_pyodel_question[k]
                 if not len(v) <= 1:
                     answers = question.answers
                     if answers is None:
                         answers = list()
                     for body_tags in v:
-                        answers.append(db.answer.insert(body=body_tags[0],
+                        answers.append(db.plugin_pyodel_answer.insert(body=body_tags[0],
                                        tags=body_tags[1]))
                     question.update_record(answers=answers)
                     session.quiz["choose_correct"].add(question.id)
@@ -544,18 +544,18 @@ def quiz_wizard():
         correct_fields = []
         for number in choose_correct:
             myset = None
-            question = db.question[number]
+            question = db.plugin_pyodel_question[number]
             if not question.answers in (None, []):
                 if len(question.answers) > 1:
                     for x, answer in enumerate(question.answers):
                         if x == 0:
-                            myset = db.answer.id == answer
+                            myset = db.plugin_pyodel_answer.id == answer
                         else:
-                            myset |= db.answer.id == answer
+                            myset |= db.plugin_pyodel_answer.id == answer
                     new_field = Field("question_%s_correct" % number,
                                                 "list:reference answer",
                                                 requires=IS_IN_DB(db(myset),
-                                                                  db.answer.id,
+                                                                  db.plugin_pyodel_answer.id,
                                                                   "%(body)s",
                                                                   multiple=True))
                     correct_fields.append(Field("question_%s" % number,
@@ -568,7 +568,7 @@ def quiz_wizard():
             if form.process().accepted:
                 for k, v in form.vars.iteritems():
                     q = k.split("_")[1]
-                    question = db.question[q]
+                    question = db.plugin_pyodel_question[q]
                     result = question.update_record(answers=v)
                     redirect(URL(f="quiz", args=["fifth",]))
         else:
@@ -578,11 +578,11 @@ def quiz_wizard():
         # allow to modify/set the answer's score
         # accept results or try again
         # allow to order question indexes
-        quiz = db.quiz[session.quiz["quiz"]]
+        quiz = db.plugin_pyodel_quiz[session.quiz["quiz"]]
         if not quiz.questions in ([], None):
             fields = []
             for question in quiz.questions:
-                question = db.question[question]
+                question = db.plugin_pyodel_question[question]
                 fields.append(Field("question_%s_points" % question.id,
                                     "double", default=question.points,
                                     label=MARKMIN(question.body),
@@ -591,7 +591,7 @@ def quiz_wizard():
             message = T("Set the question scores")
             if form.process().accepted:
                 for k, v in form.vars.iteritems():
-                    question = db.question[k.split("_")[1]]
+                    question = db.plugin_pyodel_question[k.split("_")[1]]
                     result = question.update_record(points=v)
                 redirect(URL(f="quiz", args=["sixth",]))
         else:
@@ -614,8 +614,8 @@ def answer():
     # link to back to the quiz panel
     # show time
 
-    hourglass = db.hourglass[request.args(1)]
-    question = db.question[request.args(3)]
+    hourglass = db.plugin_pyodel_hourglass[request.args(1)]
+    question = db.plugin_pyodel_question[request.args(3)]
     multiple = False
     new = False
     choice = None
@@ -628,12 +628,12 @@ def answer():
     quiz = hourglass.quiz
     questions = quiz.questions
 
-    answers_query = db.answer.id == 0
+    answers_query = db.plugin_pyodel_answer.id == 0
     for answer in question.answers:
-        answers_query |= db.answer.id == answer
+        answers_query |= db.plugin_pyodel_answer.id == answer
 
-    retort = db((db.retort.question == question.id) & \
-                (db.retort.hourglass == hourglass.id)
+    retort = db((db.plugin_pyodel_retort.question == question.id) & \
+                (db.plugin_pyodel_retort.hourglass == hourglass.id)
                 ).select().first()
 
     answers = db(answers_query).select()
@@ -643,9 +643,9 @@ def answer():
         multiple = True
 
     if retort is None:
-        retort_id = db.retort.insert(hourglass=hourglass.id,
+        retort_id = db.plugin_pyodel_retort.insert(hourglass=hourglass.id,
                                      question=question.id)
-        retort = db.retort[retort_id]
+        retort = db.plugin_pyodel_retort[retort_id]
         new = True
 
     marked = []
@@ -698,9 +698,9 @@ def answer():
     try:
         if not questions.index(question.id) == 0:
             previous = A(T("Previous"), _href=URL(f="answer",
-                           args=["hourglass",
+                           args=["plugin_pyodel_hourglass",
                                  hourglass.id,
-                                 "question",
+                                 "plugin_pyodel_question",
                                  questions[questions.index(
                                      question.id) -1]]))
         else:
@@ -710,9 +710,9 @@ def answer():
 
     try:
         next = A(T("Next"), _href=URL(f="answer",
-                       args=["hourglass",
+                       args=["plugin_pyodel_hourglass",
                              hourglass.id,
-                             "question",
+                             "plugin_pyodel_question",
                              questions[questions.index(
                                            question.id) +1]]))
     except IndexError:
@@ -722,7 +722,7 @@ def answer():
                 question=MARKMIN(question.body),
                 quiz=A(T("Back to the quiz panel"),
                        _href=URL(f="quiz",
-                                 args=["hourglass",
+                                 args=["plugin_pyodel_hourglass",
                                        hourglass.id])),
                 left=left)
 
@@ -735,18 +735,18 @@ def checkout():
 def apply():
 
     # sign if for a course
-    course = db.course[request.args(1)]
-    attendance = db.attendance.insert(course=course.id,
+    course = db.plugin_pyodel_course[request.args(1)]
+    attendance = db.plugin_pyodel_attendance.insert(course=course.id,
                                       allowed=True,
                                       student=auth.user_id)
 
     # does the student have evaluations?
-    db.evaluation.insert(course=course.id,
+    db.plugin_pyodel_evaluation.insert(course=course.id,
                          students=[attendance,],
                          name=course.name,
                          starts=request.now,
                          ends=request.now + datetime.timedelta(hours=12),
-                         quizes=[quiz.id for quiz in db(db.quiz).select()])
+                         quizzes=[quiz.id for quiz in db(db.plugin_pyodel_quiz).select()])
 
     message = T("You have been signed as attendee to the %s course.") % course.name
     return dict(message=message, course=course)
@@ -754,11 +754,11 @@ def apply():
 @auth.requires_login()
 def course():
     # show the course to the attendee
-    course = db.course[request.args(1)]
-    attendee = db((db.attendance.student == auth.user_id) & \
-                    (db.attendance.course == course.id)).select().first()
-    rows = db((db.evaluation.students.contains(attendee.id)) & \
-              (db.evaluation.course == course.id)).select()
+    course = db.plugin_pyodel_course[request.args(1)]
+    attendee = db((db.plugin_pyodel_attendance.student == auth.user_id) & \
+                    (db.plugin_pyodel_attendance.course == course.id)).select().first()
+    rows = db((db.plugin_pyodel_evaluation.students.contains(attendee.id)) & \
+              (db.plugin_pyodel_evaluation.course == course.id)).select()
     evaluations = SQLTABLE(rows, linkto=URL(f="evaluation"))
     return dict(course=course, evaluations=evaluations)
 
@@ -772,35 +772,35 @@ def course_wizard():
     if request.args(0) is None:
         new = True
         message=T("New course")
-        form = SQLFORM.factory(db.course,
+        form = SQLFORM.factory(db.plugin_pyodel_course,
                                Field("clone",
-                                     "reference course",
+                                     "reference plugin_pyodel_course",
                                      requires=IS_EMPTY_OR(
                                          IS_IN_DB(
-                                             db(db.course.template == True),
-                                             db.course.id, "%(name)s")),
+                                             db(db.plugin_pyodel_course.template == True),
+                                             db.plugin_pyodel_course.id, "%(name)s")),
                                      default=None))
         if form.process().accepted:
             if form.vars.clone:
-                lectures = db(db.lecture.course == form.vars.clone).select()
-                cloned = db.course[form.vars.clone]
+                lectures = db(db.plugin_pyodel_lecture.course == form.vars.clone).select()
+                cloned = db.plugin_pyodel_course[form.vars.clone]
                 form.vars.pop("clone")
                 for key, value in cloned.as_dict().iteritems():
                     if (not form.vars.get(key)) and (not key == "id"):
                         form.vars[key] = value
-                course = db.course.insert(**form.vars)
+                course = db.plugin_pyodel_course.insert(**form.vars)
                 for lecture in lectures:
                     new_lecture = lecture.as_dict()
                     new_lecture.pop("id")
                     new_lecture["course"] = lecture.course
-                    db.lecture.insert(**new_lecture)
+                    db.plugin_pyodel_lecture.insert(**new_lecture)
                 response.flash = T("New course added")
-                form = crud.read(db.course, course)
+                form = crud.read(db.plugin_pyodel_course, course)
                 created=True
     else:
         new = False
         course = request.args(0)
-        form = SQLFORM(db.course, course)
+        form = SQLFORM(db.plugin_pyodel_course, course)
         message=T("Update course") + " %s" % request.args(0)
         if form.process().accepted:
             response.flash = T("Course updated")
@@ -811,20 +811,20 @@ def course_wizard():
 @auth.requires_login()
 def courses():
     # show taken and not taken courses
-    query = db.course.id > 0
+    query = db.plugin_pyodel_course.id > 0
     courses = [attendance.course for attendance in \
-               db(db.attendance.student == auth.user_id).select()]
+               db(db.plugin_pyodel_attendance.student == auth.user_id).select()]
     for course in courses:
-        query &= db.course.id != course
-    untaken = SQLTABLE(db(query).select("course.id",
-                                        "course.code",
-                                        "course.name",
-                                        "course.starts"),
+        query &= db.plugin_pyodel_course.id != course
+    untaken = SQLTABLE(db(query).select("plugin_pyodel_course.id",
+                                        "plugin_pyodel_course.code",
+                                        "plugin_pyodel_course.name",
+                                        "plugin_pyodel_course.starts"),
                        linkto=URL(f="apply"))
-    taken = SQLTABLE(db(~query).select("course.id",
-                                       "course.code",
-                                       "course.name",
-                                       "course.starts"),
+    taken = SQLTABLE(db(~query).select("plugin_pyodel_course.id",
+                                       "plugin_pyodel_course.code",
+                                       "plugin_pyodel_course.name",
+                                       "plugin_pyodel_course.starts"),
                      linkto=URL(f="course"))
     return dict(taken=taken, untaken=untaken)
 
@@ -843,33 +843,33 @@ def lecture():
     new = False
     if request.args(0) == "new":
         new = True
-        course = db.course[request.args(1)]
-        db.lecture.course.readable = db.lecture.course.writable = False
-        form = SQLFORM.factory(db.lecture,
+        course = db.plugin_pyodel_course[request.args(1)]
+        db.plugin_pyodel_lecture.course.readable = db.plugin_pyodel_lecture.course.writable = False
+        form = SQLFORM.factory(db.plugin_pyodel_lecture,
                                Field("clone",
-                                     "reference lecture",
+                                     "reference plugin_pyodel_lecture",
                                      requires=IS_EMPTY_OR(
                                          IS_IN_DB(
-                                             db(db.lecture.template == True),
-                                             db.lecture.id, "%(name)s")),
+                                             db(db.plugin_pyodel_lecture.template == True),
+                                             db.plugin_pyodel_lecture.id, "%(name)s")),
                                      default=None))
         form.vars["course"] = course.id
         if form.process().accepted:
             if form.vars.clone:
-                cloned = db.lecture[form.vars.clone]
+                cloned = db.plugin_pyodel_lecture[form.vars.clone]
                 form.vars.pop("clone")
                 for key, value in cloned.as_dict().iteritems():
                     if (not form.vars.get(key)) and (not key == "id"):
                         form.vars[key] = value
-                lecture = db.lecture.insert(**form.vars)
+                lecture = db.plugin_pyodel_lecture.insert(**form.vars)
                 response.flash = T("New lecture added")
-                form = crud.read(db.lecture, lecture)
+                form = crud.read(db.plugin_pyodel_lecture, lecture)
                 created = True
     elif request.args(0) is not None:
-        lecture = db.lecture[request.args(0)]
+        lecture = db.plugin_pyodel_lecture[request.args(0)]
         course = lecture.course
-        db.lecture.course.writable = False
-        form = SQLFORM(db.lecture, request.args(0))
+        db.plugin_pyodel_lecture.course.writable = False
+        form = SQLFORM(db.plugin_pyodel_lecture, request.args(0))
     else:
         form = documents = created = new = course = None
     return dict(form=form, documents=documents, created=created, new=new,
@@ -910,7 +910,7 @@ def stream():
     referenced = db[request.args(1)][request.args(2)]
     if request.vars(0) == "new":
         new = True
-        form = SQLFORM(db.stream)
+        form = SQLFORM(db.plugin_pyodel_stream)
         if form.process().accepted:
             created = True
             stream = form.vars.id
@@ -918,11 +918,11 @@ def stream():
             if streams == None: streams = []
             streams.append(stream)
             referenced.update_record(streams=streams)
-            form = crud.read(db.stream, stream)
+            form = crud.read(db.plugin_pyodel_stream, stream)
 
     elif request.vars(0) is not None:
         stream = request.vars(0)
-        form = crud.update(db.stream, request.vars(0))
+        form = crud.update(db.plugin_pyodel_stream, request.vars(0))
     else:
         form = None
     return dict(form=form, created=created, new=new, referenced=referenced, stream=stream)
@@ -938,11 +938,11 @@ def document():
     created = False
     referenced = db[request.args(1)][request.args(2)]
     document = None
-    db.plugin_wiki_page.slug.writable = True
-    db.plugin_wiki_page.slug.requires += (IS_NOT_EMPTY(),)
+    db.plugin_pyodel_plugin_wiki_page.slug.writable = True
+    db.plugin_pyodel_plugin_wiki_page.slug.requires += (IS_NOT_EMPTY(),)
     if request.args(0) == "new":
         new = True
-        form = SQLFORM(db.plugin_wiki_page)
+        form = SQLFORM(db.plugin_pyodel_plugin_wiki_page)
         if form.process().accepted:
             documents = referenced.documents
             if documents == None: documents = []
@@ -950,12 +950,15 @@ def document():
             referenced.update_record(documents=documents)
             created = True
             document = form.vars.id
-            form = crud.read(db.plugin_wiki_page, form.vars.id)
+            form = crud.read(db.plugin_pyodel_plugin_wiki_page, form.vars.id)
     elif request.args(0) is not None:
         document = request.args(0)
-        form = crud.update(db.plugin_wiki_page, request.args(0))
+        form = crud.update(db.plugin_pyodel_plugin_wiki_page, request.args(0))
     else:
         form = new = created = referenced = document = None
 
     return dict(form=form, new=new, created=created, referenced=referenced,
                 document=document)
+
+def sandglass():
+    return dict()

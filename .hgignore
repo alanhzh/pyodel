@@ -7,6 +7,7 @@ syntax: glob
 .directory
 *.back*
 *.ini
+*plugin_wiki*
 cache/*
 private/*
 uploads/*
