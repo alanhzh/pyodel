@@ -1,6 +1,15 @@
 {{if result is not None:}}
   {{=H3(T("Done"))}}
-  {{=result}}
+  {{=P(result)}}
+  {{=H3(T("Quiz result"))}}
+  {{for q, d in data["questions"].iteritems():}}
+    {{=H5(d["question"])}}
+    <ul>
+      {{for a in d["marked"]:}}
+        {{=LI(d["answers"][a]["answer"])}}
+      {{pass}}
+    </ul>
+  {{pass}}
 {{else:}}
   {{=H3(question["question"])}}
   {{if script is not None:}}
@@ -24,8 +33,7 @@
                   "question",
                   question])}}
       {{if question == data["current"]:}}
-        {{print "found matching question/button", question}}
-        {{button_class = "plugin_pyodel_current"}}
+        {{button_class = "plugin_pyodel current"}}
       {{else:}}
         {{button_class = ""}}
       {{pass}}

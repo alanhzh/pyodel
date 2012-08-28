@@ -22,10 +22,6 @@
 #
 #    contact: spametki@gmail.com
 
-# TODO: move the model fields config.
-# to the model
-plugin_pyodel_configure_model()
-
 ####################################################################
 ############### Plugin controller local functions ##################
 ####################################################################
@@ -41,11 +37,26 @@ def even_or_odd(x):
 ######################### Plugin components ########################
 ####################################################################
 
+from gluon.tools import Wiki
+if request.function in ["grid", "panel"]:
+    # create wiki tables
+    awiki = Wiki(auth)
 
-def quiz():
-    data = plugin_pyodel_get_quiz(db(db.plugin_pyodel_sandglass).select().first().id)
-    return dict(data=data)
+@auth.requires_membership(role="manager")
+def grid():
+    """ grid/table/tablename """
+    table = request.args[1]
+    return dict(grid=SQLFORM.smartgrid(db[table], args=request.args[:2]),
+                back=A("Back to panel", _href=URL(f="panel")))
 
+@auth.requires_membership(role="manager")
+def panel():
+    """ panel/role/rolename """
+    panel = dict(links=DIV(*[SPAN(A(table.replace("plugin_pyodel_", "").capitalize(),
+                                 _href=URL(f="grid",
+                                           args=["table", table])), _class="plugin_pyodel panel item") \
+                            for table in db.tables() if table.startswith("plugin_pyodel_")]))
+    return dict(panel=panel)
 
 def sandglass():
     """args <base action>/sandglass/<id>/question/<int>"""
@@ -57,14 +68,11 @@ def sandglass():
     data = session.plugin_pyodel_sandglass
 
     if request.args(3) is not None:
-        data["current"] = int(request.args(3))
+        data["current"] = int(request.args[3])
     elif data["current"] is None:
         data["current"] = data["order"][0]
 
-    print "current is", data["current"]
-
     question = data["questions"][data["current"]]
-        
     options = []
     marked = list(question["marked"])
 
@@ -100,7 +108,6 @@ def sandglass():
                            _id="plugin_pyodel_sandglass_form")
 
     if form.process(formname="plugin_pyodel_sandglass_form").accepted:
-        print "processing question number", data["current"]
         question = data["questions"][data["current"]]
         question["marked"] = set()
         if question["multiple"]:
@@ -118,7 +125,7 @@ def sandglass():
         
         if form.vars.done:
             plugin_pyodel_set_quiz(data)
-            result = db.plugin_pyodel_sandglass[data["sandglass"]]
+            result = T("End of the quiz. Thank you")
         else:
             url = URL(c="plugin_pyodel", f="sandglass.load",
                       args=["sandglass", request.args[1],
@@ -137,8 +144,8 @@ def gradebook():
     try:
         student_id = int(request.args[1])
     except (TypeError, ValueError), e:
-        raise HTTP(500, \
-T("The user reference is invalid or was not provided"))
+        raise HTTP(500,
+              T("The user reference is invalid or was not provided"))
     try:
         gradebook = db(db.plugin_pyodel_gradebook.student == \
                        student_id).select().first()
@@ -155,12 +162,12 @@ T("The user reference is invalid or was not provided"))
         gradebook = db.plugin_pyodel_gradebook[gradebook_id]
         message = T("New gradebook created")
 
-    grades = db((db.plugin_pyodel_grade.course == \
-                     db.plugin_pyodel_course.id) & \
-                     (db.plugin_pyodel_grade.gradebook == \
-                gradebook_id)).select(groupby=\
-                db.plugin_pyodel_course.name,
-                orderby=db.plugin_pyodel_grade.instance)
+    grades = db((db.plugin_pyodel_course.id == db.plugin_pyodel_grade.course) & \
+                (db.plugin_pyodel_grade.gradebook == gradebook_id) \
+               ).select(orderby=db.plugin_pyodel_course.name)
+
+    # groupby=db.plugin_pyodel_course.name,
+    # orderby=db.plugin_pyodel_grade.instance
 
     # TODO:
     # check permissions show/edit record
@@ -180,14 +187,11 @@ T("The user reference is invalid or was not provided"))
     sorted_instances.insert(0, (None, None))
     sorted_instances_as_list = [si[1] for si in sorted_instances]
 
-    readonly = "edit" in request.args(3) or True
-
+    readonly = mode == "edit" or True
     import gluon.contrib.spreadsheet
     sheet = gluon.contrib.spreadsheet.Sheet(len(courses),
                                             len(sorted_instances),
                                             readonly=readonly)
-    # _class="plugin_pyodel_sheet"
-
     # header
     cell_r = "even"
     cell_c = None
@@ -196,14 +200,10 @@ T("The user reference is invalid or was not provided"))
         if x == 0:
             sheet.cell("r0c0", value=T("Course name"),
             readonly=readonly)
-            # _class="plugin_pyodel-sheet-cell-row-%s-col-%s-header" % \
-            # (cell_r, cell_c)
         else:
             sheet.cell("r0c%s" % x, value= \
             db.plugin_pyodel_instance[sorted_instances[x][1]].name,
             readonly=readonly)
-            # _class="plugin_pyodel-sheet-cell-row-%s-col-%s-header" % \
-            # (cell_r, cell_c)
 
     # INCOMPLETE: add course rows/cells with score data
     for x, row in enumerate(grades):
@@ -218,40 +218,43 @@ T("The user reference is invalid or was not provided"))
         cell_c = even_or_odd(instance_position)
         cell_r = even_or_odd(course_position)
         # set or overwrite the course name value
-        sheet.cell("r%sc0" % course_position, value=name)
-        # _class="plugin_pyodel-sheet-cell-row-%s-col-%s-course" % \
-        # (cell_r, cell_c)
+        sheet.cell("r%sc0" % course_position, value=name, readonly=True)
+        readonly = (mode == "view") or (not \
+                                    (auth.has_membership(role="manager") or \
+                                     auth.has_membership(role="evaluator")))
         # set the sheet score for this course instance
         sheet.cell("r%sc%s" % (course_position, instance_position),
-                   value=score)
-        # _class="plugin_pyodel-sheet-cell-row-%s-col-%s-value" % \
-        # (cell_r, cell_c)
-
+                   value=score, readonly=readonly)
     if mode == "view":
         form = crud.read(db.plugin_pyodel_gradebook, gradebook_id)
-    elif mode == "edit":
+    elif mode == "edit" and auth.has_membership(role="manager"):
         form = crud.update(db.plugin_pyodel_gradebook, gradebook_id)
     else:
         raise HTTP(500, T("Invalid mode (or none) specified"))
 
-    # tag = TAG(sheet.xml())
-
     return dict(grades=grades, gradebook=gradebook,
                 message=message, mode=mode, sheet=sheet)
 
-
+@auth.requires(auth.has_membership(role="manager") or \
+               auth.has_membership(role="evaluator"))
 def grade():
-    gradebook_id = int(request.args(1))
+    gradebook_id = int(request.args[1])
     mode = request.args(3)
     if mode == "create":
         db.plugin_pyodel_grade.gradebook.default = gradebook_id
-        form = crud.create(db.plugin_pyodel_grade, \
-                 formname="plugin_pyodel_create_gradebook_form")
+        form = crud.create(db.plugin_pyodel_grade,
+                           formname="plugin_pyodel_create_gradebook_form")
     elif mode == "update":
-        grade_id = db.plugin_pyodel_grade[int(request.args(5))]
-        form = crud.update(db.plugin_pyodel_grade, grade_id, \
-                 formname="plugin_pyodel_update_gradebook_form")
+        grade_id = db.plugin_pyodel_grade[int(request.args[5])]
+        form = crud.update(db.plugin_pyodel_grade, grade_id,
+                           formname="plugin_pyodel_update_gradebook_form")
+    elif mode == "read":
+        grade_id = db.plugin_pyodel_grade[int(request.args[5])]
+        form = crud.read(db.plugin_pyodel_grade, grade_id)
     else:
         raise HTTP(500, T("%s is not implemented") % mode)
     return dict(form=form)
+
+def wiki():
+    return auth.wiki()
 

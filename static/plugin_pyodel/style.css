@@ -1,3 +1,7 @@
-input[type=button].plugin_pyodel_current{
+input[type=button].plugin_pyodel.current{
   background-color: yellow;
 }
+
+span.plugin_pyodel.panel.item{
+    margin-left: 0.5em;
+    }

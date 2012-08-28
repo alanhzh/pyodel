@@ -74,6 +74,11 @@ PLUGIN_PYODEL_UPPERCASE_ALPHABET = ["A", "B", "C", "D", "E",
 ################## Plugin basic functions ########################
 ##################################################################
 
+def plugin_pyodel_student_format(r):
+    return "%s %s (%s)" % \
+            (db.auth_user[r.student].first_name,
+            db.auth_user[r.student].last_name, r.student)
+
 def plugin_pyodel_set_quiz(data, deadline=True):
     """ Update a sandglass from session from quiz data."""
 
@@ -93,6 +98,7 @@ def plugin_pyodel_set_quiz(data, deadline=True):
     for q, question in data["questions"].iteritems():
         complete = 1
         checked = 0
+        score = 0
         if question["multiple"]:
             # count total correct items
             complete = len([x for x in question["answers"] \
@@ -212,58 +218,12 @@ def plugin_pyodel_show_documents(value, row):
     if value is not None:
         return OL(*[LI(A(item.title,
                          _href=URL(r=request,
-                                   c="plugin_wiki",
-                                   f="page",
+                                   c="plugin_pyodel",
+                                   f="wiki",
                                    args=[item.slug,
                                    ]))) for item in value])
     else:
         return T("Empty")
-
-# custom validators (to be declared after plugin_wiki)
-def plugin_pyodel_configure_model():
-    db.plugin_pyodel_course.documents.requires = IS_IN_DB(db, \
-    "db.plugin_wiki_page", "%(slug)s", multiple=True)
-    db.plugin_pyodel_course.documents.represent = \
-    plugin_pyodel_show_documents
-    db.plugin_pyodel_course.body.represent = \
-    plugin_pyodel_show_markmin
-
-    db.plugin_pyodel_lecture.documents.requires = IS_IN_DB(db, \
-    "db.plugin_wiki_page", "%(slug)s", multiple=True)
-    db.plugin_pyodel_lecture.documents.represent = \
-    plugin_pyodel_show_documents
-    db.plugin_pyodel_lecture.body.represent = plugin_pyodel_show_markmin
-
-    db.plugin_pyodel_task.documents.requires = IS_IN_DB(db, \
-    "db.plugin_wiki_page", "%(slug)s", multiple=True)
-    db.plugin_pyodel_task.documents.represent = \
-    plugin_pyodel_show_documents
-    db.plugin_pyodel_task.body.represent = \
-    plugin_pyodel_show_markmin
-
-    db.plugin_pyodel_work.documents.requires = IS_IN_DB(db, \
-    "db.plugin_wiki_page", "%(slug)s", multiple=True)
-    db.plugin_pyodel_work.documents.represent = \
-    plugin_pyodel_show_documents
-    db.plugin_pyodel_work.body.represent = \
-    plugin_pyodel_show_markmin
-
-    db.plugin_pyodel_stream.body.represent = \
-    plugin_pyodel_show_markmin
-    db.plugin_pyodel_answer.body.represent = \
-    plugin_pyodel_show_markmin
-    db.plugin_pyodel_question.body.represent = \
-    plugin_pyodel_show_markmin
-    db.plugin_pyodel_test.body.represent = \
-    plugin_pyodel_show_markmin
-    db.plugin_pyodel_retort.body.represent = \
-    plugin_pyodel_show_markmin
-
-    db.plugin_pyodel_instance.ordered.requires = \
-    IS_IN_SET(PLUGIN_PYODEL_UPPERCASE_ALPHABET)
-
-    db.plugin_pyodel_course.code.requires = \
-    IS_NOT_IN_DB(db, db.plugin_pyodel_course.code)
 
 
 # This code was extracted from the following site:
@@ -333,7 +293,7 @@ db.define_table("plugin_pyodel_course",
                 Field("by", "list:reference auth_user"),
                 Field("starts", "datetime"),
                 Field("documents",
-                      "list:reference plugin_wiki_page"), # STATIC PAGES
+                      "list:reference wiki_page"), # STATIC PAGES
                 Field("ends", "datetime"),
                 Field("tags", "list:string"),
                 Field("cost", "double", default=0.0),
@@ -351,7 +311,7 @@ db.define_table("plugin_pyodel_lecture",
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("by", "list:reference auth_user"),
-                Field("documents", "list:reference plugin_wiki_page"),
+                Field("documents", "list:reference wiki_page"),
                 Field("tags", "list:string"),
                 format="%(name)s")
 
@@ -361,9 +321,9 @@ db.define_table("plugin_pyodel_attendance",
                 Field("course", "reference plugin_pyodel_course"),
                 Field("paid", "double", default=0.0),
                 Field("allowed", "boolean", default=False),
-                Field("passed", default=False),
+                Field("passed", "boolean", default=False),
                 Field("score", "double"),
-                format="%(student)s"
+                format=plugin_pyodel_student_format
                 )
 
 db.define_table("plugin_pyodel_task",
@@ -372,7 +332,7 @@ db.define_table("plugin_pyodel_task",
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("documents",
-                "list:reference plugin_wiki_page"),
+                "list:reference wiki_page"),
                 Field("tags", "list:string"),
                 Field("score", "double"),
                 format="%(name)s")
@@ -465,7 +425,7 @@ db.define_table("plugin_pyodel_work",
                 Field("evaluation",
                       "reference plugin_pyodel_evaluation"),
                 Field("documents",
-                "list:reference plugin_wiki_page"),
+                "list:reference wiki_page"),
                 Field("score", "double"),
                 format="%(task)s"
                 )
@@ -514,10 +474,7 @@ db.define_table("plugin_pyodel_gradebook",
                 Field("student", "reference auth_user"),
                 Field("remarks", "text"),
                 # format="%(student)s"
-                format=lambda r: "%s %s (%s)" % \
-                (db.auth_user[r.student].first_name,
-                db.auth_user[r.student].last_name,
-                r.student))
+                format=plugin_pyodel_student_format)
 
 # gradebook entries for filling a gradebook grid
 db.define_table("plugin_pyodel_grade",
@@ -529,7 +486,9 @@ db.define_table("plugin_pyodel_grade",
                       "reference plugin_pyodel_course"),  # if not null,
                                                          # should override code,
                                                          # subject, name ...
-                Field("signed", "datetime"),
+                Field("signed", "datetime",
+                      default=request.now,
+                      writable=False),
                 Field("authority",
                       "reference auth_user"),
                 Field("instance",
@@ -542,3 +501,56 @@ db.define_table("plugin_pyodel_grade",
                                   # i.e.: =fme+sme/2
                 format="%(name)s"
                 )
+
+# custom validators (to be declared after plugin_wiki)
+def plugin_pyodel_configure_model():
+    pass
+
+db.plugin_pyodel_course.documents.requires = IS_IN_DB(db, \
+'wiki_page.id', "%(slug)s", multiple=True)
+db.plugin_pyodel_course.documents.represent = \
+plugin_pyodel_show_documents
+db.plugin_pyodel_course.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_lecture.documents.requires = IS_IN_DB(db, \
+'wiki_page.id', "%(slug)s", multiple=True)
+db.plugin_pyodel_lecture.documents.represent = \
+plugin_pyodel_show_documents
+db.plugin_pyodel_lecture.body.represent = plugin_pyodel_show_markmin
+
+db.plugin_pyodel_task.documents.requires = IS_IN_DB(db, \
+'wiki_page.id', "%(slug)s", multiple=True)
+db.plugin_pyodel_task.documents.represent = \
+plugin_pyodel_show_documents
+db.plugin_pyodel_task.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_work.documents.requires = IS_IN_DB(db, \
+'wiki_page.id', "%(slug)s", multiple=True)
+db.plugin_pyodel_work.documents.represent = \
+plugin_pyodel_show_documents
+db.plugin_pyodel_work.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_stream.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_answer.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_question.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_test.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_retort.body.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_instance.ordered.requires = \
+IS_IN_SET(PLUGIN_PYODEL_UPPERCASE_ALPHABET)
+
+db.plugin_pyodel_course.code.requires = \
+IS_NOT_IN_DB(db, db.plugin_pyodel_course.code)
+
