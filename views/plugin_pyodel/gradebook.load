@@ -1,34 +1,67 @@
 {{'''
 # License: Public Domain
 # Author: Iceberg at 21cn dot com
+'''}}
+{{=H3(T("Gradebook"))}}
+{{if len(response._vars)==1:}}
+  {{=response._vars.values()[0]}}
+{{else:}}
+  {{=crud.read(db.plugin_pyodel_gradebook, gradebook.id)}}
+  {{=sheet}}
 
-With this generic.load file, you can use same function to serve two purposes.
+  {{if mode=="edit":}}
+    {{=INPUT(_type="button",
+             _value=T("update data"),
+             _id="w2p_spreadsheet_update_data")}}
 
-= regular action
-- ajax callback (when called with .load)
+    {{=SPAN(LABEL(T("Formulae"),
+                  _for="#plugin_pyodel_spreadsheet_formulae_checkbox"),
+            XML("&nbsp;"),
+            INPUT(_type="checkbox",
+                  _id="plugin_pyodel_spreadsheet_formulae_checkbox"))}}
 
-Example modified from http://www.web2py.com/AlterEgo/default/show/252:
-
-def index():
-    return dict(
-		part1='hello world',
-        	part2=LOAD(url=URL(r=request,f='auxiliary.load'),ajax=True))
-
-def auxiliary():
-    form=SQLFORM.factory(Field('name'))
-    if form.accepts(request.vars):
-        response.flash = 'ok' 
-        return dict(message="Hello %s" % form.vars.name)
-    return dict(form=form)
-
-Notice:
-
-- no need to set response.headers['web2py-response-flash']
-- no need to return a string
-even if the function is called via ajax.
-
-'''}}{{if len(response._vars)==1:}}{{=response._vars.values()[0]}}{{else:}}
-<div class="gradebook-sheet">
-{{=BEAUTIFY(response._vars)}}
-</div>
+    {{=SCRIPT('''
+    var plugin_pyodel_gradebook = %(data)s;
+    function plugin_pyodel_store_data(){
+      jQuery.each(plugin_pyodel_gradebook, function(i, val){
+        if (jQuery("#plugin_pyodel_spreadsheet_formulae_checkbox").attr("checked") == "checked"){
+          val.formula = jQuery("#" + i).val();
+        }
+        else {
+          val.score = jQuery("#" + i).val();
+        }
+      });
+    }
+    function plugin_pyodel_spreadsheet_switch_cells(to){
+        jQuery.each(plugin_pyodel_gradebook, function(i, val){
+          if(to == "formulae"){
+            val.score = jQuery("#" + i).val();
+            jQuery("#" + i).val(val.formula);
+          }
+          else {
+            val.formula = jQuery("#" + i).val();
+            jQuery("#" + i).val(val.score);
+          }
+        });
+    }
+    jQuery(function(){
+      jQuery("#plugin_pyodel_spreadsheet_formulae_checkbox").click(
+        function(){
+          if (this.checked){plugin_pyodel_spreadsheet_switch_cells("formulae");}
+          else {plugin_pyodel_spreadsheet_switch_cells(null);}
+        }
+      );
+      jQuery("#w2p_spreadsheet_update_data").click(
+        function(){
+          plugin_pyodel_store_data();
+          jQuery.ajax({url: "%(url)s",
+                       type: "POST",
+                       data: {data: JSON.stringify(plugin_pyodel_gradebook)},
+                       success: function(result){window.alert(result);},
+                      });
+        });
+    });
+    ''' % dict(data=data, url=URL(c="plugin_pyodel", f="gradebook_spreadsheet_update")))}}
+  {{pass}}
 {{pass}}
+

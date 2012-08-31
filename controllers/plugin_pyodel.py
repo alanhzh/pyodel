@@ -138,6 +138,7 @@ def sandglass():
 
 
 def gradebook():
+    import simplejson
     message = None
     mode = request.args(3)
     spreadsheet = None
@@ -162,12 +163,12 @@ def gradebook():
         gradebook = db.plugin_pyodel_gradebook[gradebook_id]
         message = T("New gradebook created")
 
-    grades = db((db.plugin_pyodel_course.id == db.plugin_pyodel_grade.course) & \
-                (db.plugin_pyodel_grade.gradebook == gradebook_id) \
-               ).select(orderby=db.plugin_pyodel_course.name)
-
     # groupby=db.plugin_pyodel_course.name,
     # orderby=db.plugin_pyodel_grade.instance
+    grades = db((db.plugin_pyodel_course.id == \
+                 db.plugin_pyodel_grade.course) & \
+                (db.plugin_pyodel_grade.gradebook == gradebook_id) \
+               ).select(orderby=db.plugin_pyodel_course.name)
 
     # TODO:
     # check permissions show/edit record
@@ -201,11 +202,12 @@ def gradebook():
             sheet.cell("r0c0", value=T("Course name"),
             readonly=readonly)
         else:
-            sheet.cell("r0c%s" % x, value= \
-            db.plugin_pyodel_instance[sorted_instances[x][1]].name,
+            sheet.cell("r0c%s" % x, value= "%(name)s %(abbreviation)s" % dict(name=db.plugin_pyodel_instance[sorted_instances[x][1]].name, abbreviation=db.plugin_pyodel_instance[sorted_instances[x][1]].abbreviation),
             readonly=readonly)
 
-    # INCOMPLETE: add course rows/cells with score data
+    # client-side grade data
+    gradebook_data = dict()
+
     for x, row in enumerate(grades):
         score = row.plugin_pyodel_grade.score
         course = int(row.plugin_pyodel_course.id)
@@ -218,13 +220,23 @@ def gradebook():
         cell_c = even_or_odd(instance_position)
         cell_r = even_or_odd(course_position)
         # set or overwrite the course name value
-        sheet.cell("r%sc0" % course_position, value=name, readonly=True)
-        readonly = (mode == "view") or (not \
-                                    (auth.has_membership(role="manager") or \
-                                     auth.has_membership(role="evaluator")))
+        sheet.cell("r%sc0" % course_position,
+                   value=name, readonly=True)
+        readonly = (mode == "view") or \
+                   (not (auth.has_membership(role="manager") or \
+                         auth.has_membership(role="evaluator")))
         # set the sheet score for this course instance
-        sheet.cell("r%sc%s" % (course_position, instance_position),
-                   value=score, readonly=readonly)
+        cell = "r%sc%s" % (course_position, instance_position)
+        sheet.cell(cell, value=score, readonly=readonly)
+        gradebook_data[cell] = \
+            dict(score=score,
+                 formula=row.plugin_pyodel_grade.formula,
+                 grade=row.plugin_pyodel_grade.id, abbreviation=\
+                 row.plugin_pyodel_grade.instance.abbreviation,
+                 course=row.plugin_pyodel_course.id)
+
+    data=simplejson.dumps(gradebook_data)
+
     if mode == "view":
         form = crud.read(db.plugin_pyodel_gradebook, gradebook_id)
     elif mode == "edit" and auth.has_membership(role="manager"):
@@ -233,7 +245,8 @@ def gradebook():
         raise HTTP(500, T("Invalid mode (or none) specified"))
 
     return dict(grades=grades, gradebook=gradebook,
-                message=message, mode=mode, sheet=sheet)
+                message=message, mode=mode, sheet=sheet,
+                data=data)
 
 @auth.requires(auth.has_membership(role="manager") or \
                auth.has_membership(role="evaluator"))
@@ -257,4 +270,38 @@ def grade():
 
 def wiki():
     return auth.wiki()
+
+def gradebook_spreadsheet_update():
+    """ todo: name-value replacement loop"""
+    import simplejson
+    data = simplejson.loads(request.vars.data)
+    processed_data = gradebook_spreadsheet_process(data)
+    return "ok"
+
+def gradebook_spreadsheet_process(data):
+    draft_data = data.copy()
+    instances = set([v["abbreviation"] for v in data.values()])
+    def replace_abbr(course, abbreviation, formula):
+        # loop for retrieving recursively all values
+        for instance in instances:
+            if instance in formula:
+                for k, v in data.iteritems():
+                    if (v["course"] == course) and \
+                       (v["abbreviation"] == instance):
+                        if not v["formula"] in ["", None]:
+                            if abbreviation in v["formula"]:
+                                raise HTTP(200,
+                                           "".join(["Circular reference for ",
+                                                    k, " and ", abbreviation]))
+                            subformula = "(%s)" % v["formula"]
+                            formula = replace_abbr(course, abbreviation, subformula)
+                        else:
+                            formula = "(%s)" % formula.replace(instance,
+                                                               v["score"])
+        return formula
+    for k, v in draft_data.iteritems():
+        if not v["formula"] in ["", None]:
+            raw_formula = replace_abbr(v["course"], v["abbreviation"], v["formula"])
+            data[k]["score"] = eval(raw_formula)
+    return data
 

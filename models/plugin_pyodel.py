@@ -388,6 +388,8 @@ db.define_table("plugin_pyodel_instance",
                 Field("name"),
                 Field("abbreviation"),
                 Field("ordered"), # A to Z (for spreadsheets)
+                Field("formula"), # default formula for individual instances
+                Field("replaces", "reference plugin_pyodel_instance"),
                 format="%(name)s"
                 )
 
@@ -476,6 +478,12 @@ db.define_table("plugin_pyodel_gradebook",
                 # format="%(student)s"
                 format=plugin_pyodel_student_format)
 
+def plugin_pyodel_grade_formula_compute(row):
+    try:
+        return db.plugin_pyodel_instance[row.instance].formula
+    except (KeyError, ValueError, AttributeError):
+        return None
+
 # gradebook entries for filling a gradebook grid
 db.define_table("plugin_pyodel_grade",
                 Field("gradebook",
@@ -496,15 +504,14 @@ db.define_table("plugin_pyodel_grade",
                                                            # practical work/activity.
                 Field("signature", "upload"), # the authority signature copy
                 Field("remarks", "text"),
-                Field("formula"), # spreadsheet syntax (web2py spreadsheet.py)
+                Field("formula", compute=plugin_pyodel_grade_formula_compute), # spreadsheet syntax (web2py spreadsheet.py)
                                   # references are plugin_pyodel_instance.abbreviation fields
                                   # i.e.: =fme+sme/2
                 format="%(name)s"
                 )
 
-# custom validators (to be declared after plugin_wiki)
-def plugin_pyodel_configure_model():
-    pass
+
+# Custom validators
 
 db.plugin_pyodel_course.documents.requires = IS_IN_DB(db, \
 'wiki_page.id', "%(slug)s", multiple=True)
@@ -550,6 +557,9 @@ plugin_pyodel_show_markmin
 
 db.plugin_pyodel_instance.ordered.requires = \
 IS_IN_SET(PLUGIN_PYODEL_UPPERCASE_ALPHABET)
+
+db.plugin_pyodel_instance.replaces.requires = \
+IS_EMPTY_OR(IS_IN_DB(db, db.plugin_pyodel_instance, "%(name)s"))
 
 db.plugin_pyodel_course.code.requires = \
 IS_NOT_IN_DB(db, db.plugin_pyodel_course.code)
