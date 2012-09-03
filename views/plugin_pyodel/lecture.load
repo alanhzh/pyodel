@@ -1,0 +1,15 @@
+{{=H5(T("Lecture streams"))}}
+{{for stream in streams:}}
+  {{button_url = URL(c="plugin_pyodel", f="stream.load",
+                     args=["stream", stream.id])}}
+  {{=SPAN(INPUT(_value=stream.name,
+                _type="button",
+                _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_lecture_stream');" % \
+                button_url))}}
+{{pass}}
+{{=SPAN(INPUT(_type="button", _value=T("Clear"), _onclick="jQuery('#plugin_pyodel_lecture_stream').html('');"))}}
+{{="  "}}
+{{=SPAN(INPUT(_type="button", _value=T("Show/hide"), _onclick="plugin_pyodel_show_hide('#plugin_pyodel_lecture_stream');"))}}
+{{=stream_workspace}}
+{{=DIV(crud.read(db.plugin_pyodel_lecture, lecture.id), _class="plugin_pyodel collapsible")}}
+

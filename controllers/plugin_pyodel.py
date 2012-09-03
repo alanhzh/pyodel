@@ -37,11 +37,6 @@ def even_or_odd(x):
 ######################### Plugin components ########################
 ####################################################################
 
-from gluon.tools import Wiki
-if request.function in ["grid", "panel"]:
-    # create wiki tables
-    awiki = Wiki(auth)
-
 @auth.requires_membership(role="manager")
 def grid():
     """ grid/table/tablename """
@@ -53,9 +48,12 @@ def grid():
 def panel():
     """ panel/role/rolename """
     panel = dict(links=DIV(*[SPAN(A(table.replace("plugin_pyodel_", "").capitalize(),
-                                 _href=URL(f="grid",
-                                           args=["table", table])), _class="plugin_pyodel panel item") \
-                            for table in db.tables() if table.startswith("plugin_pyodel_")]))
+                                  _href=URL(f="grid",
+                                           args=["table", table])),
+                                           _class="plugin_pyodel panel item") \
+                                           for table in db.tables() if \
+                                           (table.startswith("plugin_pyodel_") or \
+                                           table.startswith("wiki_"))]))
     return dict(panel=panel)
 
 def sandglass():
@@ -182,10 +180,11 @@ def gradebook():
     if instances is None:
         instances = []
     unsorted_instances = [(instance.ordered,
-                           instance) \
+                           instance,
+                           db.plugin_pyodel_instance[instance]) \
                            for instance in instances]
     sorted_instances = sorted(unsorted_instances)
-    sorted_instances.insert(0, (None, None))
+    sorted_instances.insert(0, (None, None, None))
     sorted_instances_as_list = [si[1] for si in sorted_instances]
 
     readonly = mode == "edit" or True
@@ -202,8 +201,12 @@ def gradebook():
             sheet.cell("r0c0", value=T("Course name"),
             readonly=readonly)
         else:
-            sheet.cell("r0c%s" % x, value= "%(name)s %(abbreviation)s" % dict(name=db.plugin_pyodel_instance[sorted_instances[x][1]].name, abbreviation=db.plugin_pyodel_instance[sorted_instances[x][1]].abbreviation),
-            readonly=readonly)
+            instance = sorted_instances[x][2]
+            sheet.cell("r0c%s" % x,
+                       value= "%(name)s (%(abbreviation)s)" % \
+                           dict(name=instance.name,
+                                abbreviation=instance.abbreviation),
+                                readonly=readonly)
 
     # client-side grade data
     gradebook_data = dict()
@@ -228,14 +231,20 @@ def gradebook():
         # set the sheet score for this course instance
         cell = "r%sc%s" % (course_position, instance_position)
         sheet.cell(cell, value=score, readonly=readonly)
+        grade_data = row.plugin_pyodel_grade.as_dict()
+        # json dumps error with datetime objects
+        grade_data["signed"] = str(grade_data["signed"])
         gradebook_data[cell] = \
             dict(score=score,
                  formula=row.plugin_pyodel_grade.formula,
-                 grade=row.plugin_pyodel_grade.id, abbreviation=\
+                 grade=row.plugin_pyodel_grade.id,
+                 abbreviation=\
                  row.plugin_pyodel_grade.instance.abbreviation,
-                 course=row.plugin_pyodel_course.id)
+                 course=row.plugin_pyodel_course.id,
+                 grade_data=grade_data)
 
-    data=simplejson.dumps(gradebook_data)
+    processed_data = gradebook_spreadsheet_process(gradebook_data)
+    data = simplejson.dumps(processed_data)
 
     if mode == "view":
         form = crud.read(db.plugin_pyodel_gradebook, gradebook_id)
@@ -276,10 +285,10 @@ def gradebook_spreadsheet_update():
     import simplejson
     data = simplejson.loads(request.vars.data)
     processed_data = gradebook_spreadsheet_process(data)
-    return "ok"
+    result = simplejson.dumps(dict(message="ok", newdata=processed_data))
+    return result
 
 def gradebook_spreadsheet_process(data):
-    draft_data = data.copy()
     instances = set([v["abbreviation"] for v in data.values()])
     def replace_abbr(course, abbreviation, formula):
         # loop for retrieving recursively all values
@@ -290,18 +299,142 @@ def gradebook_spreadsheet_process(data):
                        (v["abbreviation"] == instance):
                         if not v["formula"] in ["", None]:
                             if abbreviation in v["formula"]:
-                                raise HTTP(200,
-                                           "".join(["Circular reference for ",
-                                                    k, " and ", abbreviation]))
+                                raise HTTP(200, " ".join(\
+                                    ["Circular reference for", k, 
+                                     "and", abbreviation]))
                             subformula = "(%s)" % v["formula"]
-                            formula = replace_abbr(course, abbreviation, subformula)
+                            formula = replace_abbr(course,
+                                                   abbreviation,
+                                                    subformula)
                         else:
                             formula = "(%s)" % formula.replace(instance,
                                                                v["score"])
         return formula
-    for k, v in draft_data.iteritems():
+
+    cells = [k for k in data.keys() \
+             if data[k]["formula"] in ["", None]] + \
+            [k for k in data.keys() \
+            if not (data[k]["formula"] in ["", None])]
+
+    for k in cells:
+        v = data[k]
         if not v["formula"] in ["", None]:
-            raw_formula = replace_abbr(v["course"], v["abbreviation"], v["formula"])
+            raw_formula = replace_abbr(v["course"],
+                                       v["abbreviation"],
+                                       v["formula"])
             data[k]["score"] = eval(raw_formula)
+
+        score = data[k]["score"]
+        grade_score = data[k]["grade_data"]["score"]
+        formula = data[k]["formula"]
+        grade_formula = data[k]["grade_data"]["formula"]
+        grade = data[k]["grade"]
+        try:
+            same_score = float(score) == float(grade_score)
+        except ValueError:
+            same_score = score == grade_score
+        if (not same_score) or \
+           (formula != grade_formula):
+            db.plugin_pyodel_grade[grade].update_record(\
+                score=score,
+                formula=formula)
     return data
+
+def admission():
+    # give a student access to the site resources
+    import simplejson
+    course = db.plugin_pyodel_course[int(request.args[1])]
+    attendance = db(db.plugin_pyodel_attendance.course == course.id)
+    attendees = [attendee.student.id for attendee in \
+                 attendance((db.plugin_pyodel_attendance.allowed == True) & \
+                    (db.plugin_pyodel_attendance.passed != True)).select()]
+    form = SQLFORM.factory(Field("students", "list:reference auth_user",
+                               requires=IS_IN_DB(db, db.auth_user,
+                                   "%(first_name)s %(last_name)s (%(id)s)",
+                               multiple=True), default=attendees),
+                           _id="plugin_pyodel_admission_form")
+    if form.process(formname="plugin_pyodel_admission_form").accepted:
+        if request.vars.students == None: request.vars.students = []
+        for student in request.vars.students:
+            vars = dict(course=course, student=student, allowed=True)
+            attendee = db(db.plugin_pyodel_attendance.student == \
+                          student).select().first()
+            if attendee is None:
+                db.plugin_pyodel_attendance.insert(**vars)
+            else:
+                attendee.update_record(**vars)
+        for attendee in attendance.select():
+            if not str(attendee.student.id) in request.vars.students:
+                attendee.delete_record()
+        form=T("Done!")
+    else:
+        response.flash = "Form not accepted"
+    return dict(form=form, course=course, attendance=attendance.select())
+
+def bureau():
+    # teacher panel
+    # expose lists of courses evaluations and gradebooks
+    # and teacher related stats
+    return dict()
+
+def desk():
+    # attendance panel
+    # expose lists of courses and evaluations 
+    # and student related stats
+    courses = db((db.plugin_pyodel_attendance.student == auth.user_id) & \
+                 (db.plugin_pyodel_attendance.course == \
+                  db.plugin_pyodel_course.id)).select()
+    print "courses", courses
+    evaluations = []
+    for course in courses:
+        course_evaluations = db(db.plugin_pyodel_evaluation.course == \
+                                course.plugin_pyodel_course.id).select()
+        for evaluation in course_evaluations:
+            if course.plugin_pyodel_attendance.id in evaluation.students:
+                evaluations.append(evaluation)
+    return dict(courses=courses, evaluations=evaluations,
+                workspace=DIV(_id="plugin_pyodel_desk_workspace", _class="plugin_pyodel workspace"))
+
+def lecture():
+    # study (or edit) a lecture
+    lecture = db.plugin_pyodel_lecture[request.args[1]]
+    streams = [db.plugin_pyodel_stream[stream] for stream in \
+               lecture.streams]
+    documents = [db.wiki_page[document] for document in lecture.documents]
+    stream_workspace=DIV(_id="plugin_pyodel_lecture_stream", _class="plugin_pyodel workspace")
+    return dict(lecture=lecture, streams=streams, documents=documents, stream_workspace=stream_workspace)
+
+def course():
+    # attend (or edit) a course
+    course = db.plugin_pyodel_course[request.args[1]]
+    lectures = db(db.plugin_pyodel_lecture.course == course.id).select()
+    documents = [db.wiki_page[document] for document in course.documents]
+    streams = [db.plugin_pyodel_stream[stream] for stream in \
+               course.streams]
+    workspace = DIV(_id="plugin_pyodel_lecture_workspace", _class="plugin_pyodel workspace")
+    stream_workspace = DIV(_id="plugin_pyodel_course_stream", _class="plugin_pyodel workspace")
+    return dict(workspace=workspace, course=course, lectures=lectures, documents=documents,
+                streams=streams, stream_workspace=stream_workspace)
+
+def task():
+    # give a task to students
+    return dict()
+
+def work():
+    # complete a course task
+    return dict()
+
+def stream():
+    # access to media
+    stream = db.plugin_pyodel_stream[request.args[1]]
+    return dict(stream=stream)
+
+def hourglass():
+    # take an exam
+    return dict()
+
+def evaluation():
+    # view or edit a student evaluation
+    # presents different evaluation instances
+    return dict()
 

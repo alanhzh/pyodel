@@ -287,7 +287,7 @@ db.define_table("plugin_pyodel_course",
                 Field("code"),
                 Field("abbreviation"),
                 Field("name"),
-                Field("streams", "list:reference stream"),
+                Field("streams", "list:reference plugin_pyodel_stream"),
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("by", "list:reference auth_user"),
@@ -504,7 +504,8 @@ db.define_table("plugin_pyodel_grade",
                                                            # practical work/activity.
                 Field("signature", "upload"), # the authority signature copy
                 Field("remarks", "text"),
-                Field("formula", compute=plugin_pyodel_grade_formula_compute), # spreadsheet syntax (web2py spreadsheet.py)
+                Field("formula", compute=plugin_pyodel_grade_formula_compute),
+                                  # spreadsheet syntax (web2py spreadsheet.py)
                                   # references are plugin_pyodel_instance.abbreviation fields
                                   # i.e.: =fme+sme/2
                 format="%(name)s"
@@ -563,4 +564,6 @@ IS_EMPTY_OR(IS_IN_DB(db, db.plugin_pyodel_instance, "%(name)s"))
 
 db.plugin_pyodel_course.code.requires = \
 IS_NOT_IN_DB(db, db.plugin_pyodel_course.code)
+
+response.files.append(URL(c="static", f="plugin_pyodel/pyodel.js"))
 

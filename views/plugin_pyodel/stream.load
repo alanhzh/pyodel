@@ -1,0 +1,1 @@
+{{=DIV(crud.read(db.plugin_pyodel_stream, stream.id), _class="plugin_pyodel collapsible")}}

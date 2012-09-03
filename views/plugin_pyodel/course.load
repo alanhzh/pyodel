@@ -1,0 +1,54 @@
+{{=H5(T("Lectures"))}}
+{{=DIV(SQLTABLE(lectures, columns=["plugin_pyodel_lecture.chapter",
+                                "plugin_pyodel_lecture.name",
+                                "plugin_pyodel_lecture.by",
+                                "plugin_pyodel_lecture.tags"],
+                                headers={"plugin_pyodel_lecture.chapter": T("Chapter"),
+                                "plugin_pyodel_lecture.name": T("Name"),
+                                "plugin_pyodel_lecture.by": T("By"),
+                                "plugin_pyodel_lecture.tags": T("Tags")}), _class="plugin_pyodel collapsible")}}
+
+{{for lecture in lectures:}}
+  {{button_url = URL(c="plugin_pyodel", f="lecture.load",
+                     args=["lecture", lecture.id])}}
+  {{=SPAN(INPUT(_value=lecture.name,
+                _type="button",
+                _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_lecture_workspace');" % \
+                button_url))}}
+{{pass}}
+
+{{=H5(T("Documents"))}}
+{{course_document_links = DIV(_class="plugin_pyodel collapsible")}}
+{{for document in documents:}}
+  {{course_document_links.append(A(document.title, _href=URL(c="plugin_pyodel", f="wiki.html", args=[document.slug])))}}
+{{pass}}
+{{=course_document_links}}
+
+{{=H5(T("Course streams"))}}
+{{for stream in streams:}}
+  {{button_url = URL(c="plugin_pyodel", f="stream.load",
+                     args=["stream", stream.id])}}
+  {{=SPAN(INPUT(_value=stream.name,
+                _type="button",
+                _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_course_stream');" % \
+                button_url))}}
+{{pass}}
+{{=SPAN(INPUT(_type="button", _value=T("Clear"),
+              _onclick="jQuery('#plugin_pyodel_course_stream').html('');"))}}
+{{="  "}}
+{{=SPAN(INPUT(_type="button", _value=T("Show/hide"),
+              _onclick="plugin_pyodel_show_hide('#plugin_pyodel_course_stream');"))}}
+{{=stream_workspace}}
+{{=DIV(crud.read(db.plugin_pyodel_course, course.id), _class="plugin_pyodel collapsible")}}
+{{=HR()}}
+
+{{=H3(T("Lecture workspace"),
+      "  ",
+      SPAN(INPUT(_type="button", _value=T("Clear"),
+                 _onclick="jQuery('#plugin_pyodel_lecture_workspace').html('');")),
+      "  ",
+      SPAN(INPUT(_type="button", _value=T("Show/hide"),
+                 _onclick="plugin_pyodel_show_hide('#plugin_pyodel_lecture_workspace');")
+))}}
+{{=workspace}}
+

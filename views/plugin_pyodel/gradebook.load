@@ -15,16 +15,21 @@
              _id="w2p_spreadsheet_update_data")}}
 
     {{=SPAN(LABEL(T("Formulae"),
-                  _for="#plugin_pyodel_spreadsheet_formulae_checkbox"),
+                  _for="#plugin_pyodel_gradebook_formulae_checkbox"),
             XML("&nbsp;"),
             INPUT(_type="checkbox",
-                  _id="plugin_pyodel_spreadsheet_formulae_checkbox"))}}
+                  _id="plugin_pyodel_gradebook_formulae_checkbox"))}}
 
     {{=SCRIPT('''
     var plugin_pyodel_gradebook = %(data)s;
-    function plugin_pyodel_store_data(){
+
+    function plugin_pyodel_gradebook_store_data(invert){
+      var checked = jQuery("#plugin_pyodel_gradebook_formulae_checkbox").attr("checked") == "checked";
+      if (invert == true){
+        checked = !checked;
+      }
       jQuery.each(plugin_pyodel_gradebook, function(i, val){
-        if (jQuery("#plugin_pyodel_spreadsheet_formulae_checkbox").attr("checked") == "checked"){
+        if (checked){
           val.formula = jQuery("#" + i).val();
         }
         else {
@@ -32,32 +37,46 @@
         }
       });
     }
-    function plugin_pyodel_spreadsheet_switch_cells(to){
+
+    function plugin_pyodel_gradebook_update(result){
+      // loop trough gradebook data and update with new values
+      jQuery.each(result.newdata, function(i, val){
+        plugin_pyodel_gradebook[i].score = val.score;
+        plugin_pyodel_gradebook[i].formula = val.formula;
+      });
+      // call store function
+      // plugin_pyodel_gradebook_store_data();
+      plugin_pyodel_gradebook_show_values();
+      window.alert(result.message);
+    }
+
+    function plugin_pyodel_gradebook_show_values(){
+        var checked = jQuery("#plugin_pyodel_gradebook_formulae_checkbox").attr("checked") == "checked";
         jQuery.each(plugin_pyodel_gradebook, function(i, val){
-          if(to == "formulae"){
-            val.score = jQuery("#" + i).val();
+          if (checked == true){
             jQuery("#" + i).val(val.formula);
           }
-          else {
-            val.formula = jQuery("#" + i).val();
+          else{
             jQuery("#" + i).val(val.score);
           }
         });
     }
+
     jQuery(function(){
-      jQuery("#plugin_pyodel_spreadsheet_formulae_checkbox").click(
-        function(){
-          if (this.checked){plugin_pyodel_spreadsheet_switch_cells("formulae");}
-          else {plugin_pyodel_spreadsheet_switch_cells(null);}
-        }
-      );
+      jQuery("#plugin_pyodel_gradebook_formulae_checkbox").click(function(){
+        // store values
+        plugin_pyodel_gradebook_store_data(true);
+        // show data
+        plugin_pyodel_gradebook_show_values();
+        });
       jQuery("#w2p_spreadsheet_update_data").click(
         function(){
-          plugin_pyodel_store_data();
+          plugin_pyodel_gradebook_store_data();
           jQuery.ajax({url: "%(url)s",
                        type: "POST",
                        data: {data: JSON.stringify(plugin_pyodel_gradebook)},
-                       success: function(result){window.alert(result);},
+                       dataType: "json",
+                       success: plugin_pyodel_gradebook_update,
                       });
         });
     });

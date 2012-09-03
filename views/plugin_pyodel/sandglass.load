@@ -11,7 +11,8 @@
     </ul>
   {{pass}}
 {{else:}}
-  {{=H3(question["question"])}}
+  {{=H3(T("Quiz"))}}
+  {{=H5(question["question"])}}
   {{if script is not None:}}
     {{=script}}
   {{else:}}

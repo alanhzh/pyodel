@@ -1,0 +1,9 @@
+{{=SPAN(H3(T("Course %s admission") % course.name),
+        H5(T("Fee"),": ", course.cost),
+        form)}}
+{{=SPAN(SQLTABLE(attendance, columns=["plugin_pyodel_attendance.student",
+                                      "plugin_pyodel_attendance.paid",
+                                      "plugin_pyodel_attendance.allowed"],
+                             headers={"plugin_pyodel_attendance.student": T("Student"),
+                                      "plugin_pyodel_attendance.paid": T("Amount paid"),
+                                      "plugin_pyodel_attendance.allowed": T("Allowed")}))}}
