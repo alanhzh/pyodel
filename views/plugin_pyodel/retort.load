@@ -1,0 +1,13 @@
+{{if result is not None:}}
+  {{=result}}
+  {{=form}}
+{{elif question is not None:}}
+  {{=H5(T("Question"), ": ", question.name)}}
+  {{=MARKMIN(question.body)}}
+  {{=form}}
+  {{for answer in question.answers:}}
+    {{=H5(T("Answer"), ": ", answer.name)}}
+    {{=MARKMIN(answer.body)}}
+  {{pass}}
+{{pass}}
+

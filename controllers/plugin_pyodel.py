@@ -384,16 +384,37 @@ def desk():
     courses = db((db.plugin_pyodel_attendance.student == auth.user_id) & \
                  (db.plugin_pyodel_attendance.course == \
                   db.plugin_pyodel_course.id)).select()
-    print "courses", courses
-    evaluations = []
-    for course in courses:
-        course_evaluations = db(db.plugin_pyodel_evaluation.course == \
-                                course.plugin_pyodel_course.id).select()
-        for evaluation in course_evaluations:
-            if course.plugin_pyodel_attendance.id in evaluation.students:
-                evaluations.append(evaluation)
-    return dict(courses=courses, evaluations=evaluations,
-                workspace=DIV(_id="plugin_pyodel_desk_workspace", _class="plugin_pyodel workspace"))
+    workspace = DIV(_id="plugin_pyodel_desk_workspace",
+                    _class="plugin_pyodel workspace")
+    """
+    evaluations = {}
+    for row in courses:
+        course_id = row.plugin_pyodel_course.id
+        attendance_id = row.plugin_pyodel_attendance.id
+        evaluations[course_id] = dict(evaluations=\
+          db((db.plugin_pyodel_evaluation.course == \
+                                 course_id) & \
+          (db.plugin_pyodel_evaluation.students.contains(\
+                                 attendance_id))).select(),
+          course=row.plugin_pyodel_course)
+    """
+
+    hourglasses = []
+    sandglasses = []
+    works = []
+    for row in courses:
+        attendance_id = row.plugin_pyodel_attendance.id
+        evaluations=db(db.plugin_pyodel_evaluation.students.contains(\
+                        attendance_id)).select()
+        for evaluation in evaluations:
+            sandglasses += [sandglass for sandglass in \
+                            evaluation.plugin_pyodel_sandglass.select()]
+            works += [work for work in evaluation.plugin_pyodel_work.select()]
+            hourglasses += [hourglass for hourglass in \
+                            evaluation.plugin_pyodel_hourglass.select()]
+    return dict(courses=courses, workspace=workspace,
+                hourglasses=hourglasses, works=works,
+                sandglasses=sandglasses)
 
 def lecture():
     # study (or edit) a lecture
@@ -401,20 +422,30 @@ def lecture():
     streams = [db.plugin_pyodel_stream[stream] for stream in \
                lecture.streams]
     documents = [db.wiki_page[document] for document in lecture.documents]
-    stream_workspace=DIV(_id="plugin_pyodel_lecture_stream", _class="plugin_pyodel workspace")
-    return dict(lecture=lecture, streams=streams, documents=documents, stream_workspace=stream_workspace)
+    stream_workspace=DIV(_id="plugin_pyodel_lecture_stream",
+                         _class="plugin_pyodel workspace")
+    return dict(lecture=lecture, streams=streams, documents=documents,
+                stream_workspace=stream_workspace)
 
 def course():
     # attend (or edit) a course
     course = db.plugin_pyodel_course[request.args[1]]
+    attendance = db((db.plugin_pyodel_attendance.student == \
+                     auth.user_id) & \
+                    (db.plugin_pyodel_attendance.course == \
+                     course.id)).select().first()
     lectures = db(db.plugin_pyodel_lecture.course == course.id).select()
     documents = [db.wiki_page[document] for document in course.documents]
     streams = [db.plugin_pyodel_stream[stream] for stream in \
                course.streams]
+    evaluations_query = db.plugin_pyodel_evaluation.course == course.id
+    evaluations_query &= db.plugin_pyodel_evaluation.students.contains(attendance.id)
+    evaluations = db(evaluations_query).select()
+
     workspace = DIV(_id="plugin_pyodel_lecture_workspace", _class="plugin_pyodel workspace")
     stream_workspace = DIV(_id="plugin_pyodel_course_stream", _class="plugin_pyodel workspace")
     return dict(workspace=workspace, course=course, lectures=lectures, documents=documents,
-                streams=streams, stream_workspace=stream_workspace)
+                streams=streams, stream_workspace=stream_workspace, evaluations=evaluations)
 
 def task():
     # give a task to students
@@ -422,7 +453,17 @@ def task():
 
 def work():
     # complete a course task
-    return dict()
+    db.plugin_pyodel_work.id.readable = False
+    db.plugin_pyodel_work.task.writable = \
+    db.plugin_pyodel_work.evaluation.writable = \
+    db.plugin_pyodel_work.ends.writable = False
+    form=SQLFORM(db.plugin_pyodel_work, request.args[1],
+                 fields=["body", "task", "ends", "evaluation",
+                         "documents"],
+                 deletable=False)
+    if form.process(formname="plugin_pyodel_work_form").accepted:
+        form=T("Done!")
+    return dict(form=form)
 
 def stream():
     # access to media
@@ -431,7 +472,34 @@ def stream():
 
 def hourglass():
     # take an exam
-    return dict()
+    hourglass = db.plugin_pyodel_hourglass[request.args[1]]
+    test = db.plugin_pyodel_test[hourglass.test]
+    for question in test.questions:
+        db.plugin_pyodel_retort.update_or_insert(hourglass=hourglass.id,
+                                                 question=question)
+    retorts = db(db.plugin_pyodel_retort.hourglass == \
+                 hourglass.id).select()
+    workspace=DIV(_id="plugin_pyodel_hourglass_workspace",
+                  _class="plugin_pyodel workspace")
+    return dict(workspace=workspace, hourglass=hourglass,
+                retorts=retorts)
+
+def retort():
+    retort = db.plugin_pyodel_retort[request.args[1]]
+    form = SQLFORM(db.plugin_pyodel_retort, retort.id, fields=["answers", "body"])
+    result = None
+    question = retort.question
+    if form.process(formname="plugin_pyodel_retort_form").accepted:
+        retorts = db(db.plugin_pyodel_retort.hourglass == \
+                     retort.hourglass).select()
+        form = T("Done!")
+        question = None
+        result = SQLTABLE(retorts,
+                          columns=["plugin_pyodel_retort.question",
+                                   "plugin_pyodel_retort.answers"],
+                          headers={"plugin_pyodel_retort.question": T("Question"),
+                                   "plugin_pyodel_retort.answers": T("Current answers")})
+    return dict(form=form, result=result, question=question)
 
 def evaluation():
     # view or edit a student evaluation

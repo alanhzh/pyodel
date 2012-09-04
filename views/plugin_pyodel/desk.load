@@ -1,4 +1,12 @@
-{{=H3(T("My student's desk"))}}
+{{=H3(T("My student's desk"),
+      "  ",
+      SPAN(INPUT(_type="button", _value=T("Show/hide"),
+                 _onclick="plugin_pyodel_show_hide('#plugin_pyodel_desk_head');"))
+)}}
+
+<div id="plugin_pyodel_desk_head" class="plugin_pyodel collapsible">
+
+{{=H5(T("Courses"))}}
 {{=SQLTABLE(courses, columns=["plugin_pyodel_course.subject",
                               "plugin_pyodel_course.code",
                               "plugin_pyodel_course.name",
@@ -27,7 +35,57 @@
                 _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
                 button_url))}}
 {{pass}}
-{{=BEAUTIFY(evaluations)}}
+
+{{=DIV(SPAN(H5(T("Sandglasses")),
+            TABLE(THEAD(TR(TH(T("Quiz")),
+                           TH(T("Evaluation")),
+                           TH(T("Course")),
+                           TH(T("Ends")))),
+                  TBODY(*[TR(TD(INPUT(_value=sg.quiz.name, _type="submit",
+_onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
+URL(c="plugin_pyodel", f="sandglass", args=["sandglass", sg.id]))),
+                             TD(sg.evaluation.name), 
+                             TD(sg.evaluation.course.name), 
+                             TD(sg.ends)) for sg in sandglasses]))),
+SPAN(H5(T("Works")),
+            TABLE(THEAD(TR(TH(T("Task")),
+                           TH(T("Evaluation")),
+                           TH(T("Course")),
+                           TH(T("Ends")))),
+                  TBODY(*[TR(TD(INPUT(_value=wk.task.name, _type="submit",
+_onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
+URL(c="plugin_pyodel", f="work", args=["work", wk.id]))),
+                             TD(wk.evaluation.name), 
+                             TD(wk.evaluation.course.name), 
+                             TD(wk.ends)) for wk in works]))),
+SPAN(H5(T("Hourglasses")),
+            TABLE(THEAD(TR(TH(T("Test")),
+                           TH(T("Evaluation")),
+                           TH(T("Course")),
+                           TH(T("Ends")))),
+                  TBODY(*[TR(TD(INPUT(_value=hg.test.name, _type="submit",
+_onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
+URL(c="plugin_pyodel", f="hourglass", args=["hourglass", hg.id]))),
+                             TD(hg.evaluation.name), 
+                             TD(hg.evaluation.course.name), 
+                             TD(hg.ends)) for hg in hourglasses]))))}}
+
+<!-- TODO: change this to the lecture workspace -->
+{{#H3(T("Evaluations"))}}
+{{#for v in evaluations.values():}}
+{{#SPAN(H5(T(v["course"].name)),
+#      SQLTABLE(v["evaluations"],
+#              columns=["plugin_pyodel_evaluation.name",
+#                       "plugin_pyodel_evaluation.instance",
+#                       "plugin_pyodel_evaluation.ends"],
+#              headers={"plugin_pyodel_evaluation.name":T("Name"),
+#                       "plugin_pyodel_evaluation.instance":T("Instance"),
+#                       "plugin_pyodel_evaluation.ends":T("Ends")}))}}
+{{#pass}}
+<!-- TODO: end -->
+
+</div>
+
 {{=HR()}}
 {{=H3(T("Desk workspace"),
       "  ",
@@ -37,5 +95,6 @@
       SPAN(INPUT(_type="button", _value=T("Show/hide"),
                  _onclick="plugin_pyodel_show_hide('#plugin_pyodel_desk_workspace');"))
 )}}
+
 {{=workspace}}
 

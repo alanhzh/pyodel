@@ -338,15 +338,17 @@ db.define_table("plugin_pyodel_task",
                 format="%(name)s")
 
 db.define_table("plugin_pyodel_answer",
+                Field("name"),
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("tags", "list:string"),
-                format="%(body)s"
+                format="%(name)s"
                 )
 
 # Question can be multiple choice or not, or even an exercise,
 # in which case it will probably not be an actual question
 db.define_table("plugin_pyodel_question",
+                Field("name"),
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("tags", "list:string"),
@@ -357,7 +359,7 @@ db.define_table("plugin_pyodel_question",
                       "list:reference plugin_pyodel_answer",
                 readable=False),
                 Field("shuffle", "boolean", default=False),
-                format="%(body)s"
+                format="%(name)s"
                 )
 
 db.define_table("plugin_pyodel_test",

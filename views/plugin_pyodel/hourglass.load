@@ -1,0 +1,22 @@
+{{=H5(T("Hourglass"))}}
+{{=crud.read(db.plugin_pyodel_hourglass, hourglass.id)}}
+{{=H5(T("Questions"))}}
+{{=DIV(*[SPAN(" ", INPUT(_value=retort.question.name, _type="button",
+_onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_hourglass_workspace');" % URL(c="plugin_pyodel", f="retort", args=["retort", retort.id]))) for retort in retorts])}}
+{{=HR()}}
+{{=H3(T("Hourglass workspace"),
+      " ", 
+      SPAN(INPUT(_type="button",
+                 _value=T("Clear"),
+                 _onclick="jQuery('#plugin_pyodel_hourglass_workspace').html('');")),
+      " ",
+      SPAN(INPUT(_type="button",
+                 _value=T("Show/hide"),
+                 _onclick="plugin_pyodel_show_hide('#plugin_pyodel_hourglass_workspace');")))}}
+{{workspace.append(SQLTABLE(retorts,
+                            columns=["plugin_pyodel_retort.question",
+                                     "plugin_pyodel_retort.answers"],
+                            headers={"plugin_pyodel_retort.question": T("Question"),
+                                     "plugin_pyodel_retort.answers": T("Current answers")}))}}
+{{=workspace}}
+
