@@ -14,3 +14,8 @@ function plugin_pyodel_show_hide(target){
   else{plugin_pyodel_target.css("display", "block");}
 }
 
+function plugin_pyodel_gradebook_url(url){
+  url = url.replace("%3Cauth_user.id%3E", jQuery("#plugin_pyodel_bureau_gradebook_form select").val());
+  return url;
+}
+

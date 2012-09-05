@@ -81,6 +81,7 @@ def data():
 
 @auth.requires_login()
 def test():
+    """
     gradebook=LOAD(c="plugin_pyodel", f="gradebook.load",
                    args=["gradebook", 1, "mode", "edit"],
                    ajax=True)
@@ -89,6 +90,9 @@ def test():
     sandglass=LOAD(c="plugin_pyodel", f="sandglass.load",
                    args=["sandglass", 1], ajax=True)
     desk=LOAD(c="plugin_pyodel", f="desk.load", ajax=True)
+    """
+    bureau = LOAD(c="plugin_pyodel", f="bureau.load", ajax=True)
+    gradebook = admission = sandglass = desk = None
     return dict(gradebook=gradebook, admission=admission,
-                sandglass=sandglass, desk=desk)
+                sandglass=sandglass, desk=desk, bureau=bureau)
 

@@ -1,0 +1,43 @@
+{{=H3(T("My teacher's bureau"),
+      "  ",
+      SPAN(INPUT(_type="button", _value=T("Show/hide"),
+                 _onclick="plugin_pyodel_show_hide('#plugin_pyodel_desk_head');"))
+)}}
+
+<div id="plugin_pyodel_desk_head" class="plugin_pyodel collapsible">
+{{=H5(T("Gradebooks"))}}
+{{gradebook_form=SQLFORM.factory(Field("student",
+                                       label=T("Student"),
+                                       requires=IS_IN_DB(db, db.auth_user, "%(first_name)s %(last_name)s (%(id)s)")),
+                                 _id="plugin_pyodel_bureau_gradebook_form")}}
+{{=gradebook_form.custom.begin}}
+{{=DIV(SPAN(gradebook_form.custom.widget.student),
+       SPAN(INPUT(_type="button",
+                  _value=T("Open gradebook"),
+                  _onclick="plugin_pyodel_load_workspace(plugin_pyodel_gradebook_url('%s'), 'plugin_pyodel_desk_workspace');" % URL(c="plugin_pyodel", f="gradebook", args=["student", "<auth_user.id>", "mode", "edit"]))))}}
+{{=gradebook_form.custom.end}}
+{{=H5(T("Components"))}}
+{{=SPAN(INPUT(_type="button",
+              _value=T("Add grades"),
+              _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % URL(c="plugin_pyodel", f="grade.load", args=["gradebook", None, "mode", "create"])))}}
+
+{{=H5(T("Admission"))}}
+{{for course in courses:}}
+  {{=SPAN(INPUT(_type="button",
+                _value=course.name,
+                _onclick="plugin_pyodel_load_workspace(plugin_pyodel_gradebook_url('%s'), 'plugin_pyodel_desk_workspace');" % URL(c="plugin_pyodel", f="admission.load", args=["course", course.id])))}}
+{{pass}}
+
+</div><!-- end of desk head -->
+
+{{=HR()}}
+{{=H3(T("Bureau workspace"),
+      "  ",
+      SPAN(INPUT(_type="button", _value=T("Clear"),
+                 _onclick="jQuery('#plugin_pyodel_desk_workspace').html('');")),
+      "  ",
+      SPAN(INPUT(_type="button", _value=T("Show/hide"),
+                 _onclick="plugin_pyodel_show_hide('#plugin_pyodel_desk_workspace');"))
+)}}
+{{=workspace}}
+

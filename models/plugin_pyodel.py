@@ -500,7 +500,7 @@ db.define_table("plugin_pyodel_grade",
                       default=request.now,
                       writable=False),
                 Field("authority",
-                      "reference auth_user"),
+                      "reference auth_user", default=auth.user_id),
                 Field("instance",
                       "reference plugin_pyodel_instance"), # exam,
                                                            # practical work/activity.

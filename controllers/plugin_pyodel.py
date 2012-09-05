@@ -33,6 +33,31 @@ def even_or_odd(x):
         eoo = "even"
     return eoo
 
+def attendance_setup(attendance):
+    attendance = db.plugin_pyodel_attendance[attendance]
+    course = attendance.course
+    student = attendance.student
+    gradebook = db(db.plugin_pyodel_gradebook.student == \
+          student).select().first()
+    if gradebook is None:
+        instances = [instance.id for instance in \
+                     db(db.plugin_pyodel_instance).select()]
+        gradebook_id = \
+        db.plugin_pyodel_gradebook.insert(student=student,
+                                          instances=instances)
+    else:
+        gradebook_id = gradebook.id
+        instances = gradebook.instances
+    for instance in instances:
+        grade = db((db.plugin_pyodel_grade.instance == instance) & \
+                   (db.plugin_pyodel_grade.course == course.id) & \
+                   (db.plugin_pyodel_grade.gradebook == \
+                    gradebook_id) ).select().first()
+        if grade is None:
+            grade_id = db.plugin_pyodel_grade.insert(\
+                           instance=instance,gradebook=gradebook_id,
+                           course=course)
+
 ####################################################################
 ######################### Plugin components ########################
 ####################################################################
@@ -179,6 +204,7 @@ def gradebook():
     # make an ordered sequence of instances for this gradebook
     if instances is None:
         instances = []
+
     unsorted_instances = [(instance.ordered,
                            instance,
                            db.plugin_pyodel_instance[instance]) \
@@ -260,8 +286,15 @@ def gradebook():
 @auth.requires(auth.has_membership(role="manager") or \
                auth.has_membership(role="evaluator"))
 def grade():
-    gradebook_id = int(request.args[1])
     mode = request.args(3)
+    db.plugin_pyodel_grade.id.readable = False
+    try:
+        gradebook_id = int(request.args[1])
+    except (IndexError, ValueError, KeyError):
+        if mode == "create":
+            gradebook_id = None
+        else:
+            raise IndexError("No grade id specified")
     if mode == "create":
         db.plugin_pyodel_grade.gradebook.default = gradebook_id
         form = crud.create(db.plugin_pyodel_grade,
@@ -307,8 +340,9 @@ def gradebook_spreadsheet_process(data):
                                                    abbreviation,
                                                     subformula)
                         else:
-                            formula = "(%s)" % formula.replace(instance,
-                                                               v["score"])
+                            formula = "(%s)" % \
+                            formula.replace(instance,
+                                            str(v["score"]))
         return formula
 
     cells = [k for k in data.keys() \
@@ -322,7 +356,10 @@ def gradebook_spreadsheet_process(data):
             raw_formula = replace_abbr(v["course"],
                                        v["abbreviation"],
                                        v["formula"])
-            data[k]["score"] = eval(raw_formula)
+            try:
+                data[k]["score"] = eval(raw_formula)
+            except TypeError, e:
+                data[k]["score"] = "<error!: %s>" % str(e)
 
         score = data[k]["score"]
         grade_score = data[k]["grade_data"]["score"]
@@ -331,7 +368,7 @@ def gradebook_spreadsheet_process(data):
         grade = data[k]["grade"]
         try:
             same_score = float(score) == float(grade_score)
-        except ValueError:
+        except (ValueError, TypeError):
             same_score = score == grade_score
         if (not same_score) or \
            (formula != grade_formula):
@@ -360,22 +397,28 @@ def admission():
             attendee = db(db.plugin_pyodel_attendance.student == \
                           student).select().first()
             if attendee is None:
-                db.plugin_pyodel_attendance.insert(**vars)
+                attendee_id = db.plugin_pyodel_attendance.insert(**vars)
             else:
                 attendee.update_record(**vars)
+                attendee_id = attendee.id
+            # Initial attendee db setup
+            attendance_setup(attendee_id)
         for attendee in attendance.select():
             if not str(attendee.student.id) in request.vars.students:
                 attendee.delete_record()
         form=T("Done!")
-    else:
-        response.flash = "Form not accepted"
     return dict(form=form, course=course, attendance=attendance.select())
 
+@auth.requires(auth.has_membership(role="manager") or \
+               auth.has_membership(role="evaluator"))
 def bureau():
     # teacher panel
     # expose lists of courses evaluations and gradebooks
     # and teacher related stats
-    return dict()
+    workspace = DIV(_id="plugin_pyodel_desk_workspace",
+                    _class="plugin_pyodel workspace")
+    courses = db(db.plugin_pyodel_course).select()
+    return dict(workspace=workspace, courses=courses)
 
 def desk():
     # attendance panel
@@ -398,7 +441,6 @@ def desk():
                                  attendance_id))).select(),
           course=row.plugin_pyodel_course)
     """
-
     hourglasses = []
     sandglasses = []
     works = []
@@ -486,6 +528,7 @@ def hourglass():
 
 def retort():
     retort = db.plugin_pyodel_retort[request.args[1]]
+    db.plugin_pyodel_retort.id.readable = False
     form = SQLFORM(db.plugin_pyodel_retort, retort.id, fields=["answers", "body"])
     result = None
     question = retort.question
