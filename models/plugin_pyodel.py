@@ -57,6 +57,19 @@ import datetime
 if not request.extension == "load":
     response.files.append(URL(c="static", f="plugin_pyodel/style.css"))
 
+
+##################################################################
+################## Plugin startup configuration ##################
+##################################################################
+
+# Check if wiki tables are defined
+if not "wiki_page" in db.tables():
+    auth.wiki(resolve=False)
+
+# Checkout configuration function
+if not "PLUGIN_PYODEL_ATTENDANCE_CHECKOUT" in globals():
+    PLUGIN_PYODEL_ATTENDANCE_CHECKOUT = None
+
 ##################################################################
 ################## Plugin static values sets #####################
 ##################################################################
@@ -73,6 +86,55 @@ PLUGIN_PYODEL_UPPERCASE_ALPHABET = ["A", "B", "C", "D", "E",
 ##################################################################
 ################## Plugin basic functions ########################
 ##################################################################
+
+def plugin_pyodel_update_payment(attendance=None,
+                                 student=auth.user_id,
+                                 course=None,
+                                 code=None,
+                                 amount=0.00):
+    try:
+        if course is None:
+            course = db(db.plugin_pyodel_course.code==code\
+                        ).select().first()
+        else:
+            course = db.plugin_pyodel_course[course]
+        if attendance is not None:
+            attendee = db.plugin_pyodel_attendance[attendance]
+        else:
+            attendee = db((db.plugin_pyodel_attendance.student==\
+                           student) & \
+                          (db.plugin_pyodel_attendance.course==\
+                           course.id)).select().first()
+        try:
+            new_amount = attendee.paid + amount
+        except TypeError:
+            # No previous payment
+            new_amount = amount
+        attendee.update_record(paid=new_amount)
+        if new_amount >= course.cost:
+            if not attendee.allowed:
+                attendee.update_record(allowed=True)
+                plugin_pyodel_attendance_setup(attendee.id)
+        return (True, T("Payment updated"))
+    except (AttributeError, KeyError), e:
+        return (False, str(e))
+
+def plugin_pyodel_get_payment(attendance=None,
+                              student=auth.user_id,
+                              course=None,
+                              code=None):
+    if attendance is not None:
+        attendee = db.plugin_pyodel_attendance[attendance]
+    else:
+        if code is not None:
+            course = db(db.plugin_pyodel_course.code == \
+                        code).select().first()
+        else:
+            course = db.plugin_pyodel_course[course]
+        attendee = db((db.plugin_pyodel_attendance.student==student) & \
+                      (db.plugin_pyodel_attendance.course==course.id)\
+                       ).select().first()
+    return attendee.paid
 
 def plugin_pyodel_student_format(r):
     return "%s %s (%s)" % \
@@ -261,6 +323,69 @@ def plugin_pyodel_rom_to_int(string):
     return returnint
 
 
+def plugin_pyodel_attendance_setup(attendance):
+    attendance = db.plugin_pyodel_attendance[attendance]
+    course = attendance.course
+    student = attendance.student
+
+    # Add default evaluations
+    template_evaluations = db((db.plugin_pyodel_evaluation.course == \
+                               course.id) & \
+                              (db.plugin_pyodel_evaluation.template == \
+                               True)).select()
+    for te in template_evaluations:
+        ted = te.as_dict()
+        ted["template"] = False
+        ted["students"] = [attendance.id,]
+        ted["id"] = None
+        print "Inserting evaluation", ted
+        evaluation_id = db.plugin_pyodel_evaluation.insert(**ted)
+        # Create sandglasses, hourglasses and works
+        for quiz in te.quizzes:
+            print "Inserting sandglass", [quiz, quiz.starts, quiz.ends, te.id]
+            db.plugin_pyodel_sandglass.insert(quiz=quiz,
+                                              starts=quiz.starts,
+                                              ends=quiz.ends,
+                                              evaluation=te.id)
+        for task in te.tasks:
+            print "Inserting work", [task, task.starts, task.ends, te.id]
+            db.plugin_pyodel_work.insert(task=task,
+                                         starts=task.starts,
+                                         ends=task.ends,
+                                         evaluation=te.id)
+        for test in te.tests:
+            print "Inserting hourglass", [test, test.starts, test.ends, te.id]
+            db.plugin_pyodel_hourglass.insert(test=test,
+                                              starts=test.starts,
+                                              ends=ends.test.ends,
+                                              evaluation=te.id)
+
+    # Get or create a student's gradebook
+    gradebook = db(db.plugin_pyodel_gradebook.student == \
+          student).select().first()
+    if gradebook is None:
+        instances = [instance.id for instance in \
+                     db(db.plugin_pyodel_instance).select()]
+        gradebook_id = \
+        db.plugin_pyodel_gradebook.insert(student=student,
+                                          instances=instances)
+    else:
+        gradebook_id = gradebook.id
+        instances = gradebook.instances
+
+    # Get or create course grades
+    for instance in instances:
+        grade = db((db.plugin_pyodel_grade.instance == instance) & \
+                   (db.plugin_pyodel_grade.course == course.id) & \
+                   (db.plugin_pyodel_grade.gradebook == \
+                    gradebook_id) ).select().first()
+        if grade is None:
+            grade_id = db.plugin_pyodel_grade.insert(\
+                           instance=instance,gradebook=gradebook_id,
+                           course=course)
+
+
+
 ##################################################################
 ################## Plugin table definitions ######################
 ##################################################################
@@ -287,6 +412,8 @@ db.define_table("plugin_pyodel_course",
                 Field("code"),
                 Field("abbreviation"),
                 Field("name"),
+                Field("description", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("streams", "list:reference plugin_pyodel_stream"),
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
@@ -308,6 +435,8 @@ db.define_table("plugin_pyodel_lecture",
                       "reference plugin_pyodel_course"),
                 Field("streams",
                       "list:reference plugin_pyodel_stream"),
+                Field("description", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("body", "text",
                       comment=PLUGIN_PYODEL_MARKMIN_COMMENT), # MARKMIN
                 Field("by", "list:reference auth_user"),
@@ -378,7 +507,8 @@ db.define_table("plugin_pyodel_test",
 db.define_table("plugin_pyodel_quiz",
                 Field("body", "text"), # use quiz syntax
                 Field("name"),
-                Field("description"),
+                Field("description", "text",
+                      comment=PLUGIN_PYODEL_MARKMIN_COMMENT),
                 Field("tags", "list:string"),
                 Field("shuffle", "boolean"), # will mix questions, not answers
                 Field("score", "double"),
@@ -522,12 +652,16 @@ db.plugin_pyodel_course.documents.represent = \
 plugin_pyodel_show_documents
 db.plugin_pyodel_course.body.represent = \
 plugin_pyodel_show_markmin
+db.plugin_pyodel_course.description.represent = \
+plugin_pyodel_show_markmin
 
 db.plugin_pyodel_lecture.documents.requires = IS_IN_DB(db, \
 'wiki_page.id', "%(slug)s", multiple=True)
 db.plugin_pyodel_lecture.documents.represent = \
 plugin_pyodel_show_documents
 db.plugin_pyodel_lecture.body.represent = plugin_pyodel_show_markmin
+db.plugin_pyodel_lecture.description.represent = \
+plugin_pyodel_show_markmin
 
 db.plugin_pyodel_task.documents.requires = IS_IN_DB(db, \
 'wiki_page.id', "%(slug)s", multiple=True)
@@ -566,6 +700,12 @@ IS_EMPTY_OR(IS_IN_DB(db, db.plugin_pyodel_instance, "%(name)s"))
 
 db.plugin_pyodel_course.code.requires = \
 IS_NOT_IN_DB(db, db.plugin_pyodel_course.code)
+
+db.plugin_pyodel_evaluation.description.represent = \
+plugin_pyodel_show_markmin
+
+db.plugin_pyodel_quiz.description.represent = \
+plugin_pyodel_show_markmin
 
 response.files.append(URL(c="static", f="plugin_pyodel/pyodel.js"))
 

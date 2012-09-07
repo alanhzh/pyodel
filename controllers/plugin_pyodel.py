@@ -33,31 +33,6 @@ def even_or_odd(x):
         eoo = "even"
     return eoo
 
-def attendance_setup(attendance):
-    attendance = db.plugin_pyodel_attendance[attendance]
-    course = attendance.course
-    student = attendance.student
-    gradebook = db(db.plugin_pyodel_gradebook.student == \
-          student).select().first()
-    if gradebook is None:
-        instances = [instance.id for instance in \
-                     db(db.plugin_pyodel_instance).select()]
-        gradebook_id = \
-        db.plugin_pyodel_gradebook.insert(student=student,
-                                          instances=instances)
-    else:
-        gradebook_id = gradebook.id
-        instances = gradebook.instances
-    for instance in instances:
-        grade = db((db.plugin_pyodel_grade.instance == instance) & \
-                   (db.plugin_pyodel_grade.course == course.id) & \
-                   (db.plugin_pyodel_grade.gradebook == \
-                    gradebook_id) ).select().first()
-        if grade is None:
-            grade_id = db.plugin_pyodel_grade.insert(\
-                           instance=instance,gradebook=gradebook_id,
-                           course=course)
-
 ####################################################################
 ######################### Plugin components ########################
 ####################################################################
@@ -402,9 +377,11 @@ def admission():
                 attendee.update_record(**vars)
                 attendee_id = attendee.id
             # Initial attendee db setup
-            attendance_setup(attendee_id)
+            plugin_pyodel_attendance_setup(attendee_id)
         for attendee in attendance.select():
             if not str(attendee.student.id) in request.vars.students:
+                # WARNING: all non selected attendances will be removed
+                # (including those with payments recorded)
                 attendee.delete_record()
         form=T("Done!")
     return dict(form=form, course=course, attendance=attendance.select())
@@ -433,21 +410,21 @@ def desk():
     evaluations = {}
     for row in courses:
         course_id = row.plugin_pyodel_course.id
-        attendance_id = row.plugin_pyodel_attendance.id
+        attendee_id = row.plugin_pyodel_attendance.id
         evaluations[course_id] = dict(evaluations=\
           db((db.plugin_pyodel_evaluation.course == \
                                  course_id) & \
           (db.plugin_pyodel_evaluation.students.contains(\
-                                 attendance_id))).select(),
+                                 attendee_id))).select(),
           course=row.plugin_pyodel_course)
     """
     hourglasses = []
     sandglasses = []
     works = []
     for row in courses:
-        attendance_id = row.plugin_pyodel_attendance.id
+        attendee_id = row.plugin_pyodel_attendance.id
         evaluations=db(db.plugin_pyodel_evaluation.students.contains(\
-                        attendance_id)).select()
+                        attendee_id)).select()
         for evaluation in evaluations:
             sandglasses += [sandglass for sandglass in \
                             evaluation.plugin_pyodel_sandglass.select()]
@@ -481,13 +458,18 @@ def course():
     streams = [db.plugin_pyodel_stream[stream] for stream in \
                course.streams]
     evaluations_query = db.plugin_pyodel_evaluation.course == course.id
-    evaluations_query &= db.plugin_pyodel_evaluation.students.contains(attendance.id)
+    evaluations_query &= \
+        db.plugin_pyodel_evaluation.students.contains(attendance.id)
     evaluations = db(evaluations_query).select()
 
-    workspace = DIV(_id="plugin_pyodel_lecture_workspace", _class="plugin_pyodel workspace")
-    stream_workspace = DIV(_id="plugin_pyodel_course_stream", _class="plugin_pyodel workspace")
-    return dict(workspace=workspace, course=course, lectures=lectures, documents=documents,
-                streams=streams, stream_workspace=stream_workspace, evaluations=evaluations)
+    workspace = DIV(_id="plugin_pyodel_lecture_workspace",
+                    _class="plugin_pyodel workspace")
+    stream_workspace = DIV(_id="plugin_pyodel_course_stream",
+                           _class="plugin_pyodel workspace")
+    return dict(workspace=workspace,
+                course=course, lectures=lectures, documents=documents,
+                streams=streams, stream_workspace=stream_workspace,
+                evaluations=evaluations)
 
 def task():
     # give a task to students
@@ -529,7 +511,9 @@ def hourglass():
 def retort():
     retort = db.plugin_pyodel_retort[request.args[1]]
     db.plugin_pyodel_retort.id.readable = False
-    form = SQLFORM(db.plugin_pyodel_retort, retort.id, fields=["answers", "body"])
+    form = SQLFORM(db.plugin_pyodel_retort,
+                   retort.id,
+                   fields=["answers", "body"])
     result = None
     question = retort.question
     if form.process(formname="plugin_pyodel_retort_form").accepted:
@@ -540,12 +524,108 @@ def retort():
         result = SQLTABLE(retorts,
                           columns=["plugin_pyodel_retort.question",
                                    "plugin_pyodel_retort.answers"],
-                          headers={"plugin_pyodel_retort.question": T("Question"),
-                                   "plugin_pyodel_retort.answers": T("Current answers")})
+                          headers={"plugin_pyodel_retort.question": \
+                                       T("Question"),
+                                   "plugin_pyodel_retort.answers": \
+                                       T("Current answers")})
     return dict(form=form, result=result, question=question)
 
+@auth.requires(((auth.id_group("manager") is None) and \
+                 auth.is_logged_in()) or \
+                auth.has_membership("manager"))
+def setup():
+    report = dict()
+
+    # look for managers
+    managers_group = db(db.auth_group.role == \
+                        "manager").select().first()
+    if managers_group is None:
+        managers_group_id = \
+            db.auth_group.insert(role="manager",
+                                 description="Managers group")
+        report["Groups"] = T("Created a new managers group")
+    else:
+        managers_group_id = managers_group.id
+        report["Groups"] = T("No groups created")
+    managers = db(db.auth_membership.group_id == \
+                  managers_group_id).count()
+    if managers in [0, None]:
+        db.auth_membership.insert(user_id=auth.user_id,
+                                  group_id=managers_group_id)
+        report["Memberships"] = \
+            T("Created a new managers account for this user")
+    else:
+        report["Memberships"] = \
+            T("No memberships created")
+
+    # if the course table is empty, create demo records
+    courses = db(db.plugin_pyodel_course).count()
+    if courses in [0, None]:
+        import os
+        demo_filepath = os.path.join(request.folder,
+                                     "private", "demo.csv")
+        with open(demo_filepath, "r+b") as demo_file:
+            db.import_from_csv_file(demo_file)
+            report["Records"] = T("Imported demo to db")
+    else:
+        report["Records"] = T("Demo is already imported")
+
+    # Add users to the demo
+    report["Demo"] = dict()
+    demo = db(db.plugin_pyodel_course.code == \
+        "Pyodel-Demo").select().first()
+    if demo is not None:
+        demo_attendees = db(db.plugin_pyodel_attendance.course == \
+            demo.id).select()
+        report["Demo"]["Attendees"] = list()
+        for user in db(db.auth_user).select():
+            if len([attendee.id for attendee in demo_attendees \
+                if attendee.student == user.id]) <= 0:
+                attendee_id = db.plugin_pyodel_attendance.insert(\
+                                    student=user.id,
+                                    course=demo.id,
+                                    allowed=True)
+                plugin_pyodel_attendance_setup(attendee_id)
+                report["Demo"]["Attendees"].append(\
+                    "%(first)s %(last)s" % \
+                dict(first=user.first_name,
+                     last=user.last_name))
+    else:
+        report["Demo"]["Attendees"] = T("No demo found")
+    return dict(report=report)
+
+@auth.requires_login()
+def attendance():
+    import simplejson
+    db.plugin_pyodel_attendance.student.writable = False
+    db.plugin_pyodel_attendance.paid.readable = False
+    db.plugin_pyodel_attendance.allowed.readable = False
+    course_query = db.plugin_pyodel_course.id > 0
+    for attendance in db(db.plugin_pyodel_attendance.student == \
+        auth.user_id).select():
+        course_query &= db.plugin_pyodel_course != attendance.course
+    db.plugin_pyodel_attendance.course.requires = \
+        IS_IN_DB(db, course_query, "%(name)s")
+    courses = simplejson.dumps(db(course_query).select().as_list())
+    form = crud.create(db.plugin_pyodel_attendance)
+    form.vars.student = auth.user_id
+    if form.process().accepted:
+        # TODO: Look for a checkout process and execute it
+        # passing the new values
+        if PLUGIN_PYODEL_ATTENDANCE_CHECKOUT is not None:
+            course = db.plugin_pyodel_course[form.vars.course]
+            PLUGIN_PYODEL_ATTENDANCE_CHECKOUT(course=course.id,
+                                              attendance=form.vars.id,
+                                              student=form.vars.student,
+                                              code=course.code,
+                                              cost=course.cost)
+        form = T("New attendance created. Thanks")
+    return dict(form=form, courses=courses)
+
+@auth.requires_login()
 def evaluation():
     # view or edit a student evaluation
     # presents different evaluation instances
-    return dict()
+    evaluation = db.plugin_pyodel_evaluation[request.args[1]]
+    return dict(evaluation=evaluation)
 

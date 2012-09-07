@@ -40,6 +40,12 @@
                 button_url))}}
 {{pass}}
 
+{{=SPAN(INPUT(_value=T("Apply for a new course"),
+              _type="button",
+              _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
+              URL(c="plugin_pyodel",
+                  f="attendance.load")))}}
+
 {{=DIV(SPAN(H5(T("Sandglasses")),
             TABLE(THEAD(TR(TH(T("Quiz")),
                            TH(T("Evaluation")),
@@ -48,7 +54,13 @@
                   TBODY(*[TR(TD(INPUT(_value=sg.quiz.name, _type="submit",
 _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
 URL(c="plugin_pyodel", f="sandglass", args=["sandglass", sg.id]))),
-                             TD(sg.evaluation.name), 
+                             TD(INPUT(_value=sg.evaluation.name,
+                                      _type="button",
+                                      _onclick=\
+"plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % URL(c="plugin_pyodel",
+                                                                            f="evaluation.load",
+                                                                            args=["evaluation",
+                                                                                  sg.evaluation.id]))),
                              TD(sg.evaluation.course.name), 
                              TD(sg.ends)) for sg in sandglasses]))),
 SPAN(H5(T("Works")),

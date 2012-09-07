@@ -17,16 +17,19 @@ def index():
     if you need a simple wiki simple replace the two lines below with:
     return auth.wiki()
     """
-    response.flash = T("Welcome to web2py!")
-    return dict(message=T('Hello World'))
-    
-def edit():
-    form = SQLFORM(db.wiki_page)
-    return dict(form=form)
-    
-def wiki():
-    return dict(wiki=auth.wiki(), rows=db(db.wiki_page).select())
+    actions = UL(LI(A(T("Student's desk"),
+                      _href=URL(c="default",
+                                f="desk.html"))),
+                 LI(A(T("Teacher's bureau"),
+                      _href=URL(c="default",
+                                f="bureau.html"))),
+                 LI(A(T("Manager panel"),
+                      _href=URL(c="plugin_pyodel",
+                                f="panel.html"))))
+    response.flash = T("Welcome to Pyodel!")
+    return dict(message=T('Explore the plugin features'), actions=actions)
 
+    
 def user():
     """
     exposes:
@@ -80,19 +83,12 @@ def data():
     return dict(form=crud())
 
 @auth.requires_login()
-def test():
-    """
-    gradebook=LOAD(c="plugin_pyodel", f="gradebook.load",
-                   args=["gradebook", 1, "mode", "edit"],
-                   ajax=True)
-    admission=LOAD(c="plugin_pyodel", f="admission.load",
-                   args=["course", 1], ajax=True)
-    sandglass=LOAD(c="plugin_pyodel", f="sandglass.load",
-                   args=["sandglass", 1], ajax=True)
-    desk=LOAD(c="plugin_pyodel", f="desk.load", ajax=True)
-    """
+def desk():
+    desk = LOAD(c="plugin_pyodel", f="desk.load", ajax=True)
+    return dict(desk=desk)
+
+@auth.requires_login()
+def bureau():
     bureau = LOAD(c="plugin_pyodel", f="bureau.load", ajax=True)
-    gradebook = admission = sandglass = desk = None
-    return dict(gradebook=gradebook, admission=admission,
-                sandglass=sandglass, desk=desk, bureau=bureau)
+    return dict(bureau=bureau)
 
