@@ -109,6 +109,8 @@ def sandglass():
                            default=False, label=T("I'm done!")),
                            _id="plugin_pyodel_sandglass_form")
 
+    sandglass = db.plugin_pyodel_sandglass[data["sandglass"]]
+
     if form.process(formname="plugin_pyodel_sandglass_form").accepted:
         question = data["questions"][data["current"]]
         question["marked"] = set()
@@ -125,8 +127,12 @@ def sandglass():
             
         data["current"] = next
         
-        if form.vars.done or ((sandglass.ends < request.now) and \
-                              (sandglass.ends is not None)):
+        try:
+            timedout = sandglass.ends < request.now
+        except TypeError:
+            timedout = False
+
+        if form.vars.done or timedout:
             plugin_pyodel_set_quiz(data)
             result = T("End of the quiz. Thank you")
         else:
@@ -136,10 +142,12 @@ def sandglass():
             script = SCRIPT("""
             plugin_pyodel_sandglass_form_load('%(url)s');
             """ % dict(url=url))
-    sandglass = db.plugin_pyodel_sandglass[data["sandglass"]]
     feedback = False
-    if (sandglass.feedback) or ((sandglass.ends < request.now) and \
-                                (sandlgass.ends is not None)):
+    try:
+        timedout = sandglass.ends < request.now
+    except TypeError:
+        timedout = False
+    if sandglass.feedback or timedout:
         feedback = True
     return dict(form=form, data=data, result=result,
                 question=question, script=script,
@@ -194,7 +202,7 @@ def gradebook():
     if instances is None:
         instances = []
 
-    unsorted_instances = [(instance.ordered,
+    unsorted_instances = [(db.plugin_pyodel_instance[instance].ordered,
                            instance,
                            db.plugin_pyodel_instance[instance]) \
                            for instance in instances]
@@ -421,7 +429,8 @@ def desk():
     # and student related stats
     courses = db((db.plugin_pyodel_attendance.student == auth.user_id) & \
                  (db.plugin_pyodel_attendance.course == \
-                  db.plugin_pyodel_course.id)).select()
+                  db.plugin_pyodel_course.id) & \
+                 (db.plugin_pyodel_attendance.allowed == True)).select()
     workspace = DIV(_id="plugin_pyodel_desk_workspace",
                     _class="plugin_pyodel workspace")
     """

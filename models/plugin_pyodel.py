@@ -95,7 +95,8 @@ def plugin_pyodel_on_registration(form):
     if course is not None:
         attendee_id = \
             db.plugin_pyodel_attendance.insert(course=course.id,
-                                               student=form.vars.id)
+                                               student=form.vars.id,
+                                               allowed=True)
     else:
         return
     # setup attendee
@@ -177,8 +178,11 @@ def plugin_pyodel_set_quiz(data, deadline=True):
     score_per_question = quiz_score/questions
 
     if deadline:
-        if (sandglass.ends is not None) and \
-           (sandglass.ends < request.now):
+        try:
+            timedout = sandglass.ends < request.now
+        except TypeError:
+            timedout = False
+        if timedout:
             raise HTTP(500, T("Quiz timed out"))
 
     for q, question in data["questions"].iteritems():
@@ -223,8 +227,11 @@ def plugin_pyodel_get_quiz(sandglass_id):
     """
     
     sandglass = db.plugin_pyodel_sandglass[int(sandglass_id)]
-    if (sandglass.ends is not None) and \
-       (sandglass.ends < request.now):
+    try:
+        timedout = sandglass.ends < request.now
+    except TypeError:
+        timedout = False
+    if timedout:
         sandglass.update_record(feedback=True)
 
     quiz = sandglass.quiz
@@ -352,7 +359,6 @@ def plugin_pyodel_rom_to_int(string):
 
 
 def plugin_pyodel_attendance_setup(attendance):
-
     attendance = db.plugin_pyodel_attendance[attendance]
     course = attendance.course
     student = attendance.student
@@ -739,6 +745,9 @@ plugin_pyodel_show_markmin
 
 db.plugin_pyodel_quiz.description.represent = \
 plugin_pyodel_show_markmin
+
+db.plugin_pyodel_stream.html.represent = lambda html, r: XML(html)
+db.plugin_pyodel_stream.body.represent = plugin_pyodel_show_markmin
 
 response.files.append(URL(c="static", f="plugin_pyodel/pyodel.js"))
 
