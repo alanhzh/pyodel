@@ -19,3 +19,12 @@ function plugin_pyodel_gradebook_url(url){
   return url;
 }
 
+function plugin_pyodel_course_preview(){
+  var plugin_pyodel_course_preview_value = this.value;
+  jQuery("#plugin_pyodel_course_preview").html("");
+  jQuery.each(plugin_pyodel_course_previews, function(i, val){
+      if (val[0] == plugin_pyodel_course_preview_value){
+        jQuery("#plugin_pyodel_course_preview").html(val[1]);
+      }
+    });
+}

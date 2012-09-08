@@ -25,6 +25,7 @@
 ####################################################################
 ############### Plugin controller local functions ##################
 ####################################################################
+import datetime
 
 def even_or_odd(x):
     eoo = "odd"
@@ -40,6 +41,10 @@ def even_or_odd(x):
 @auth.requires_membership(role="manager")
 def grid():
     """ grid/table/tablename """
+    db.plugin_pyodel_sandglass.feedback.readable = \
+    db.plugin_pyodel_sandglass.feedback.writable = \
+    db.plugin_pyodel_hourglass.feedback.readable = \
+    db.plugin_pyodel_hourglass.feedback.writable = True
     table = request.args[1]
     return dict(grid=SQLFORM.smartgrid(db[table], args=request.args[:2]),
                 back=A("Back to panel", _href=URL(f="panel")))
@@ -99,7 +104,6 @@ def sandglass():
                     default=default,
                     widget=SQLFORM.widgets.radio.widget)
 
-    # TODO: different field denfinition by multiple/non-multiple value
     form = SQLFORM.factory(field,
                            Field("done", "boolean",
                            default=False, label=T("I'm done!")),
@@ -121,7 +125,8 @@ def sandglass():
             
         data["current"] = next
         
-        if form.vars.done:
+        if form.vars.done or ((sandglass.ends < request.now) and \
+                              (sandglass.ends is not None)):
             plugin_pyodel_set_quiz(data)
             result = T("End of the quiz. Thank you")
         else:
@@ -131,8 +136,14 @@ def sandglass():
             script = SCRIPT("""
             plugin_pyodel_sandglass_form_load('%(url)s');
             """ % dict(url=url))
+    sandglass = db.plugin_pyodel_sandglass[data["sandglass"]]
+    feedback = False
+    if (sandglass.feedback) or ((sandglass.ends < request.now) and \
+                                (sandlgass.ends is not None)):
+        feedback = True
     return dict(form=form, data=data, result=result,
-                question=question, script=script)
+                question=question, script=script,
+                feedback=feedback, sandglass=sandglass)
 
 
 def gradebook():
@@ -150,6 +161,9 @@ def gradebook():
                        student_id).select().first()
         gradebook_id = gradebook.id
         instances = gradebook.instances
+        if instances in [None, []]:
+            raise HTTP(200,
+                       T("The requested gradebook has no instances."))
     except (AttributeError, KeyError), e:
         instances = [instance.id for instance in \
         db(db.plugin_pyodel_instance).select()]
@@ -176,7 +190,7 @@ def gradebook():
     courses.add(None)
     courses = list(courses)
 
-    # make an ordered sequence of instances for this gradebook
+    # Make an ordered sequence of instances for this gradebook
     if instances is None:
         instances = []
 
@@ -219,8 +233,12 @@ def gradebook():
         # TODO: static data or formula (compute
         # values with other instances)
         name = row.plugin_pyodel_course.name
-        course_position = courses.index(course)
-        instance_position = sorted_instances_as_list.index(instance)
+        try:
+            course_position = courses.index(course)
+            instance_position = sorted_instances_as_list.index(instance)
+        except (ValueError, IndexError):
+            # TODO: remove unresolved grade/instance/course references
+            continue
         cell_c = even_or_odd(instance_position)
         cell_r = even_or_odd(course_position)
         # set or overwrite the course name value
@@ -560,6 +578,7 @@ def setup():
 
     # if the course table is empty, create demo records
     courses = db(db.plugin_pyodel_course).count()
+    """
     if courses in [0, None]:
         import os
         demo_filepath = os.path.join(request.folder,
@@ -569,7 +588,7 @@ def setup():
             report["Records"] = T("Imported demo to db")
     else:
         report["Records"] = T("Demo is already imported")
-
+    """
     # Add users to the demo
     report["Demo"] = dict()
     demo = db(db.plugin_pyodel_course.code == \
@@ -596,18 +615,28 @@ def setup():
 
 @auth.requires_login()
 def attendance():
-    import simplejson
     db.plugin_pyodel_attendance.student.writable = False
     db.plugin_pyodel_attendance.paid.readable = False
+    db.plugin_pyodel_attendance.paid.writable = False
+    db.plugin_pyodel_attendance.score.readable = False
+    db.plugin_pyodel_attendance.score.writable = False
     db.plugin_pyodel_attendance.allowed.readable = False
+    db.plugin_pyodel_attendance.allowed.writable = False
+    db.plugin_pyodel_attendance.passed.readable = False
+    db.plugin_pyodel_attendance.passed.writable = False
+
+    thisyear = datetime.datetime(request.now.year, 1, 1)
     course_query = db.plugin_pyodel_course.id > 0
+    course_query &= db.plugin_pyodel_course.starts >= thisyear
     for attendance in db(db.plugin_pyodel_attendance.student == \
         auth.user_id).select():
-        course_query &= db.plugin_pyodel_course != attendance.course
+        course_query &= db.plugin_pyodel_course.id != attendance.course
+
     db.plugin_pyodel_attendance.course.requires = \
-        IS_IN_DB(db, course_query, "%(name)s")
-    courses = simplejson.dumps(db(course_query).select().as_list())
-    form = crud.create(db.plugin_pyodel_attendance)
+        IS_IN_DB(db(course_query), db.plugin_pyodel_course.id, "%(name)s")
+    courses = db(course_query).select()
+    form = SQLFORM(db.plugin_pyodel_attendance,
+                       _id="plugin_pyodel_attendance_form")
     form.vars.student = auth.user_id
     if form.process().accepted:
         # TODO: Look for a checkout process and execute it

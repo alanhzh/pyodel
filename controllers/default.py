@@ -25,7 +25,13 @@ def index():
                                 f="bureau.html"))),
                  LI(A(T("Manager panel"),
                       _href=URL(c="plugin_pyodel",
-                                f="panel.html"))))
+                                f="panel.html"))),
+                 LI(A(T("Wiki"),
+                      _href=URL(c="plugin_pyodel",
+                                f="wiki.html"))),
+                 LI(A(T("Setup"),
+                      _href=URL(c="plugin_pyodel",
+                                f="setup.html"))))
     response.flash = T("Welcome to Pyodel!")
     return dict(message=T('Explore the plugin features'), actions=actions)
 

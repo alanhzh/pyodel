@@ -1,1 +1,20 @@
-{{=form}}
+{{import simplejson}}
+{{previews=[]}}
+{{for course in courses:}}
+  {{preview=SPAN(H5(course.name),
+                 MARKMIN(course.description),
+                 UL(LI(T("Code"), ": ", course.code),
+                    LI(T("Start time"), ": ", course.starts),
+                    LI(T("Ends"), ": ", course.ends))).xml()}}
+  {{previews.append([course.id, preview])}}
+{{pass}}
+{{=SCRIPT("""
+var plugin_pyodel_course_previews = %s;
+jQuery(function(){
+  jQuery("#plugin_pyodel_attendance_form [name=course]").change(
+    plugin_pyodel_course_preview);
+  plugin_pyodel_course_preview();
+  });
+
+""" % simplejson.dumps(previews))}}
+{{=DIV(SPAN(form), SPAN(_id="plugin_pyodel_course_preview"))}}

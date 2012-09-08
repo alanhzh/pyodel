@@ -1,12 +1,22 @@
+{{H5("Data for debugging the sandglass")}}
 {{if result is not None:}}
   {{=H3(T("Done"))}}
   {{=P(result)}}
   {{=H3(T("Quiz result"))}}
+  {{if feedback:}}
+    {{=H5("Score", ": ", sandglass.score)}}
+  {{pass}}
   {{for q, d in data["questions"].iteritems():}}
     {{=H5(d["question"])}}
     <ul>
       {{for a in d["marked"]:}}
-        {{=LI(d["answers"][a]["answer"])}}
+        {{li=LI(SPAN(d["answers"][a]["answer"]))}}
+        {{if feedback:}}
+          {{li.append(SPAN(": "))}}
+            {{correct=T("Correct") if d["answers"][a]["correct"] else T("Incorrect")}}
+          {{li.append(SPAN(correct))}}
+        {{pass}}
+        {{=li}}
       {{pass}}
     </ul>
   {{pass}}

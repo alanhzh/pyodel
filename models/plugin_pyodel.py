@@ -87,6 +87,29 @@ PLUGIN_PYODEL_UPPERCASE_ALPHABET = ["A", "B", "C", "D", "E",
 ################## Plugin basic functions ########################
 ##################################################################
 
+def plugin_pyodel_on_registration(form):
+    # look for the demo course
+    course = db(db.plugin_pyodel_course.code==\
+                "Pyodel-demo").select().first()
+    # add a course attendance
+    if course is not None:
+        attendee_id = \
+            db.plugin_pyodel_attendance.insert(course=course.id,
+                                               student=form.vars.id)
+    else:
+        return
+    # setup attendee
+    plugin_pyodel_attendance_setup(attendee_id)
+
+# Add event handler to post-registration app event
+if hasattr(auth.settings, "register_onaccept"):
+    if type(auth.settings.register_onaccept) == list:
+        auth.settings.register_onaccept.append(\
+            plugin_pyodel_on_registration)
+    elif auth.settings.register_onaccept is None:
+        auth.settings.register_onaccept = \
+            [plugin_pyodel_on_registration,]
+
 def plugin_pyodel_update_payment(attendance=None,
                                  student=auth.user_id,
                                  course=None,
@@ -154,7 +177,8 @@ def plugin_pyodel_set_quiz(data, deadline=True):
     score_per_question = quiz_score/questions
 
     if deadline:
-        if sandglass.ends < request.now:
+        if (sandglass.ends is not None) and \
+           (sandglass.ends < request.now):
             raise HTTP(500, T("Quiz timed out"))
 
     for q, question in data["questions"].iteritems():
@@ -199,6 +223,10 @@ def plugin_pyodel_get_quiz(sandglass_id):
     """
     
     sandglass = db.plugin_pyodel_sandglass[int(sandglass_id)]
+    if (sandglass.ends is not None) and \
+       (sandglass.ends < request.now):
+        sandglass.update_record(feedback=True)
+
     quiz = sandglass.quiz
     body = quiz.body
     data = dict(questions=dict(),
@@ -324,9 +352,12 @@ def plugin_pyodel_rom_to_int(string):
 
 
 def plugin_pyodel_attendance_setup(attendance):
+
     attendance = db.plugin_pyodel_attendance[attendance]
     course = attendance.course
     student = attendance.student
+    if course.code == "Pyodel-demo": feedback = True
+    else: feedback = False
 
     # Add default evaluations
     template_evaluations = db((db.plugin_pyodel_evaluation.course == \
@@ -338,27 +369,25 @@ def plugin_pyodel_attendance_setup(attendance):
         ted["template"] = False
         ted["students"] = [attendance.id,]
         ted["id"] = None
-        print "Inserting evaluation", ted
         evaluation_id = db.plugin_pyodel_evaluation.insert(**ted)
         # Create sandglasses, hourglasses and works
         for quiz in te.quizzes:
-            print "Inserting sandglass", [quiz, quiz.starts, quiz.ends, te.id]
             db.plugin_pyodel_sandglass.insert(quiz=quiz,
                                               starts=quiz.starts,
                                               ends=quiz.ends,
-                                              evaluation=te.id)
+                                              evaluation=evaluation_id,
+                                              feedback=feedback)
         for task in te.tasks:
-            print "Inserting work", [task, task.starts, task.ends, te.id]
             db.plugin_pyodel_work.insert(task=task,
                                          starts=task.starts,
                                          ends=task.ends,
-                                         evaluation=te.id)
+                                         evaluation=evaluation_id)
         for test in te.tests:
-            print "Inserting hourglass", [test, test.starts, test.ends, te.id]
             db.plugin_pyodel_hourglass.insert(test=test,
                                               starts=test.starts,
                                               ends=ends.test.ends,
-                                              evaluation=te.id)
+                                              evaluation=evaluation_id,
+                                              feedback=feedback)
 
     # Get or create a student's gradebook
     gradebook = db(db.plugin_pyodel_gradebook.student == \
@@ -547,7 +576,7 @@ db.define_table("plugin_pyodel_evaluation",
                 Field("score", "double"),
                 Field("tags", "list:string"),
                 Field("tasks", "list:reference plugin_pyodel_task"),
-                format="%(name)s")
+                format="%(name)s %(students)s")
 
 # Student's task work
 db.define_table("plugin_pyodel_work",
@@ -571,7 +600,9 @@ db.define_table("plugin_pyodel_hourglass",
                 Field("ends", "datetime"),
                 Field("evaluation",
                       "reference plugin_pyodel_evaluation"),
-                #Field("score", "double"),
+                Field("score", "double"),
+                Field("feedback", "boolean", default=False,
+                      writable=False, readable=False), # Allow showing test results
                 format="%(test)s")
 
 # A timer for a quiz
@@ -583,6 +614,8 @@ db.define_table("plugin_pyodel_sandglass",
                       "reference plugin_pyodel_evaluation"),
                 Field("score", "double"),
                 Field("answers", "list:string"), # <int question>:<int answer> pairs
+                Field("feedback", "boolean", default=False,
+                      writable=False, readable=False), # Allow showing quiz results
                 format="%(quiz)s")
 
 # A student's evaluation answer (can refer to an option
