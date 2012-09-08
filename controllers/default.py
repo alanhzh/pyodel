@@ -31,7 +31,10 @@ def index():
                                 f="wiki.html"))),
                  LI(A(T("Setup"),
                       _href=URL(c="plugin_pyodel",
-                                f="setup.html"))))
+                                f="setup.html"))),
+                 LI(A(T("Submit a quiz proposal"),
+                      _href=URL(c="default",
+                                f="quiz.html"))))
     response.flash = T("Welcome to Pyodel!")
     return dict(message=T('Explore the plugin features'), actions=actions)
 
@@ -98,3 +101,37 @@ def bureau():
     bureau = LOAD(c="plugin_pyodel", f="bureau.load", ajax=True)
     return dict(bureau=bureau)
 
+@auth.requires_login()
+def quiz():
+    db.plugin_pyodel_quiz.body.comment = MARKMIN("""
+### Quiz syntax:
+
+- ``Quiz instructions are interpreted by line (line-breaks terminate them).``:gray
+- ``Note that answers will appear in the given order unless sh: (for shuffle)``:gray
+- ``is added to each question group``:gray:
+
+.
+
+- q: The actual question goes here. Ok?
+- c: C stands for correct answer (I guess)
+- i: I'm afraid this is an incorrect answer
+- i: This too is wrong
+- i: Another one
+- s: 1.232 # score for this question (not mandatory)
+- m: # this is for allowing multiple answers
+- sh: # add this so the answers are mixed
+
+.
+
+- q: Here's another question. ¿What about it?
+- c: ...
+- i: ...
+
+.
+""")
+    db.plugin_pyodel_quiz.name.requires = [IS_NOT_EMPTY(), IS_NOT_IN_DB(db, db.plugin_pyodel_quiz.name)]
+    db.plugin_pyodel_quiz.body.requires = IS_NOT_EMPTY()
+    form = crud.create(db.plugin_pyodel_quiz)
+    if form.process().accepted:
+        response.flash = T("Thank you")
+    return dict(form=form)

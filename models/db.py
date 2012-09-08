@@ -82,4 +82,14 @@ use_janrain(auth,filename='private/janrain.key')
 ## after defining tables, uncomment below to enable auditing
 # auth.enable_record_versioning(db)
 
+import random
+
+pyodel_images = [
+"https://lh5.googleusercontent.com/-69BKZfBq9Ig/UEvBb6J6cZI/AAAAAAAAApM/UbUmSq03EBg/s288/yodel-student.png",
+"https://lh5.googleusercontent.com/-iKWV9_bApME/UEvBa-X-RJI/AAAAAAAAApE/cYVCOGP8JpI/s288/yodel-student-2.png",
+"https://lh3.googleusercontent.com/-iBEyUbydXY0/UEvBaKrjU7I/AAAAAAAAAo8/cDtgS53MHVc/s288/yodel-professor.png",
+"https://lh3.googleusercontent.com/-fo9gVk8J0yE/UEvBZJynQ3I/AAAAAAAAAo0/qnubQrbmzMY/s288/yodel-professor-2.png",
+"https://lh5.googleusercontent.com/-KkhXAHF5ELM/UEvBZGHFlwI/AAAAAAAAAos/MOMKxCLAi1k/s288/yodel-interview.png",
+"https://lh3.googleusercontent.com/-IZAspMKuXi0/UEvBYDxf4VI/AAAAAAAAAok/PhN4PcmaT-s/s288/yodel-class.png"]
+pyodel_image = random.choice(pyodel_images)
 

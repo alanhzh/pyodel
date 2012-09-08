@@ -1,1 +1,5 @@
-{{=BEAUTIFY(evaluation)}}
+{{=H5(T("Evaluation"))}}
+{{=SQLFORM(db.plugin_pyodel_evaluation, evaluation.id, readonly=True,
+fields=["code", "name", "evaluators", "lectures", "ends", "tags", "students"])}}
+{{=MARKMIN(evaluation.description)}}
+

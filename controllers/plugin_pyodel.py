@@ -587,7 +587,6 @@ def setup():
 
     # if the course table is empty, create demo records
     courses = db(db.plugin_pyodel_course).count()
-    """
     if courses in [0, None]:
         import os
         demo_filepath = os.path.join(request.folder,
@@ -597,7 +596,7 @@ def setup():
             report["Records"] = T("Imported demo to db")
     else:
         report["Records"] = T("Demo is already imported")
-    """
+
     # Add users to the demo
     report["Demo"] = dict()
     demo = db(db.plugin_pyodel_course.code == \
@@ -664,6 +663,7 @@ def attendance():
 def evaluation():
     # view or edit a student evaluation
     # presents different evaluation instances
+    db.plugin_pyodel_evaluation.id.readable = False
     evaluation = db.plugin_pyodel_evaluation[request.args[1]]
     return dict(evaluation=evaluation)
 

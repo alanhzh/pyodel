@@ -11,5 +11,7 @@
 {{="  "}}
 {{=SPAN(INPUT(_type="button", _value=T("Show/hide"), _onclick="plugin_pyodel_show_hide('#plugin_pyodel_lecture_stream');"))}}
 {{=stream_workspace}}
+{{=H5(T("Documents"))}}
+{{=UL(*[LI(A(document.title, _href=URL(c="plugin_pyodel", f="wiki.html", args=[document.slug]))) for document in lecture.documents])}}
 {{=DIV(crud.read(db.plugin_pyodel_lecture, lecture.id), _class="plugin_pyodel collapsible")}}
 
