@@ -58,7 +58,8 @@ def panel():
                                            _class="plugin_pyodel panel item") \
                                            for table in db.tables() if \
                                            (table.startswith("plugin_pyodel_") or \
-                                           table.startswith("wiki_"))]))
+                                           table.startswith("wiki_") or \
+                                           (table == "auth_membership"))]))
     return dict(panel=panel)
 
 def sandglass():
@@ -588,16 +589,24 @@ def setup():
     # if the course table is empty, create demo records
     courses = db(db.plugin_pyodel_course).count()
     if courses in [0, None]:
+        import StringIO
+        import plugin_pyodel.demo
+        data = plugin_pyodel.demo.DATA
+        sio = StringIO.StringIO()
+        sio.write(data)
+        sio.seek(0)
+        # import os
         id_map = dict()
         for tablename in db.tables():
             id_map[tablename] = dict()
-        import os
-        demo_filepath = os.path.join(request.folder,
-                                     "static", "plugin_pyodel",
-                                     "demo.csv")
-        with open(demo_filepath, "r+b") as demo_file:
-            db.import_from_csv_file(demo_file, id_map=id_map)
-            report["Records"] = T("Imported demo to db")
+        # demo_filepath = os.path.join(request.folder,
+        #                             "static", "plugin_pyodel",
+        #                             "demo.csv")
+        # with open(demo_filepath, "r") as demo_file:
+        #    db.import_from_csv_file(demo_file, id_map=id_map)
+        #    report["Records"] = T("Imported demo to db")
+        db.import_from_csv_file(sio, id_map=id_map)
+        sio.close()
     else:
         report["Records"] = T("Demo is already imported")
 
