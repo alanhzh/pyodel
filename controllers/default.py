@@ -135,3 +135,13 @@ def quiz():
     if form.process().accepted:
         response.flash = T("Thank you")
     return dict(form=form)
+
+"""
+@auth.requires_membership(role="manager")
+def demo():
+    import StringIO
+    myfile = StringIO.StringIO()
+    db.export_to_csv_file(myfile)
+    myfile.seek(0)
+    return response.stream(myfile, attachment=True)
+"""

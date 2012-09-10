@@ -588,26 +588,30 @@ def setup():
     # if the course table is empty, create demo records
     courses = db(db.plugin_pyodel_course).count()
     if courses in [0, None]:
+        id_map = dict()
+        for tablename in db.tables():
+            id_map[tablename] = dict()
         import os
         demo_filepath = os.path.join(request.folder,
-                                     "private", "demo.csv")
+                                     "static", "plugin_pyodel",
+                                     "demo.csv")
         with open(demo_filepath, "r+b") as demo_file:
-            db.import_from_csv_file(demo_file)
+            db.import_from_csv_file(demo_file, id_map=id_map)
             report["Records"] = T("Imported demo to db")
     else:
         report["Records"] = T("Demo is already imported")
 
     # Add users to the demo
     report["Demo"] = dict()
-    demo = db(db.plugin_pyodel_course.code == \
-        "Pyodel-Demo").select().first()
+    demo = db(db.plugin_pyodel_course.code==\
+        "Pyodel-demo").select().first()
     if demo is not None:
-        demo_attendees = db(db.plugin_pyodel_attendance.course == \
-            demo.id).select()
+        demo_attendees = [attendee.student for attendee in \
+                          db(db.plugin_pyodel_attendance.course == \
+                             demo.id).select()]
         report["Demo"]["Attendees"] = list()
         for user in db(db.auth_user).select():
-            if len([attendee.id for attendee in demo_attendees \
-                if attendee.student == user.id]) <= 0:
+            if not (user.id in demo_attendees):
                 attendee_id = db.plugin_pyodel_attendance.insert(\
                                     student=user.id,
                                     course=demo.id,
