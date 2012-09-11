@@ -136,8 +136,6 @@ def sandglass():
         if form.vars.done or timedout:
             plugin_pyodel_set_quiz(data)
             result = T("End of the quiz. Thank you")
-            # retrieve the updated sandglass
-            sandglass = db.plugin_pyodel_sandglass[data["sandglass"]]
         else:
             url = URL(c="plugin_pyodel", f="sandglass.load",
                       args=["sandglass", request.args[1],
@@ -188,13 +186,16 @@ def gradebook():
 
     # groupby=db.plugin_pyodel_course.name,
     # orderby=db.plugin_pyodel_grade.instance
-    grades = db(db.plugin_pyodel_grade.gradebook == gradebook_id).select()
+    grades = db((db.plugin_pyodel_course.id == \
+                 db.plugin_pyodel_grade.course) & \
+                (db.plugin_pyodel_grade.gradebook == gradebook_id) \
+               ).select(orderby=db.plugin_pyodel_course.name)
 
     # TODO:
     # check permissions show/edit record
 
     # count courses
-    courses = set([row.course for row in grades])
+    courses = set([row.plugin_pyodel_grade.course for row in grades])
     courses.add(None)
     courses = list(courses)
 
@@ -235,12 +236,12 @@ def gradebook():
     gradebook_data = dict()
 
     for x, row in enumerate(grades):
-        score = row.score
-        course = int(row.course)
-        instance = int(row.instance)
+        score = row.plugin_pyodel_grade.score
+        course = int(row.plugin_pyodel_course.id)
+        instance = int(row.plugin_pyodel_grade.instance.id)
         # TODO: static data or formula (compute
         # values with other instances)
-        name = row.course.name
+        name = row.plugin_pyodel_course.name
         try:
             course_position = courses.index(course)
             instance_position = sorted_instances_as_list.index(instance)
@@ -258,16 +259,16 @@ def gradebook():
         # set the sheet score for this course instance
         cell = "r%sc%s" % (course_position, instance_position)
         sheet.cell(cell, value=score, readonly=readonly)
-        grade_data = row.as_dict()
+        grade_data = row.plugin_pyodel_grade.as_dict()
         # json dumps error with datetime objects
         grade_data["signed"] = str(grade_data["signed"])
         gradebook_data[cell] = \
             dict(score=score,
-                 formula=row.formula,
-                 grade=row.id,
+                 formula=row.plugin_pyodel_grade.formula,
+                 grade=row.plugin_pyodel_grade.id,
                  abbreviation=\
-                 row.instance.abbreviation,
-                 course=row.course,
+                 row.plugin_pyodel_grade.instance.abbreviation,
+                 course=row.plugin_pyodel_course.id,
                  grade_data=grade_data)
 
     processed_data = gradebook_spreadsheet_process(gradebook_data)
@@ -300,10 +301,9 @@ def grade():
         db.plugin_pyodel_grade.gradebook.default = gradebook_id
         form = crud.create(db.plugin_pyodel_grade,
                            formname="plugin_pyodel_create_gradebook_form")
-        form.vars.gradebook = gradebook_id
     elif mode == "update":
-        grade = db.plugin_pyodel_grade[int(request.args[5])]
-        form = crud.update(db.plugin_pyodel_grade, grade.id,
+        grade_id = db.plugin_pyodel_grade[int(request.args[5])]
+        form = crud.update(db.plugin_pyodel_grade, grade_id,
                            formname="plugin_pyodel_update_gradebook_form")
     elif mode == "read":
         grade_id = db.plugin_pyodel_grade[int(request.args[5])]
@@ -428,16 +428,29 @@ def desk():
     # attendance panel
     # expose lists of courses and evaluations 
     # and student related stats
-    attendances = db((db.plugin_pyodel_attendance.student == auth.user_id) & \
-                     (db.plugin_pyodel_attendance.allowed == True)).select()
+    courses = db((db.plugin_pyodel_attendance.student == auth.user_id) & \
+                 (db.plugin_pyodel_attendance.course == \
+                  db.plugin_pyodel_course.id) & \
+                 (db.plugin_pyodel_attendance.allowed == True)).select()
     workspace = DIV(_id="plugin_pyodel_desk_workspace",
                     _class="plugin_pyodel workspace")
-
+    """
+    evaluations = {}
+    for row in courses:
+        course_id = row.plugin_pyodel_course.id
+        attendee_id = row.plugin_pyodel_attendance.id
+        evaluations[course_id] = dict(evaluations=\
+          db((db.plugin_pyodel_evaluation.course == \
+                                 course_id) & \
+          (db.plugin_pyodel_evaluation.students.contains(\
+                                 attendee_id))).select(),
+          course=row.plugin_pyodel_course)
+    """
     hourglasses = []
     sandglasses = []
     works = []
-    for row in attendances:
-        attendee_id = row.id
+    for row in courses:
+        attendee_id = row.plugin_pyodel_attendance.id
         evaluations=db(db.plugin_pyodel_evaluation.students.contains(\
                         attendee_id)).select()
         for evaluation in evaluations:
@@ -446,7 +459,7 @@ def desk():
             works += [work for work in evaluation.plugin_pyodel_work.select()]
             hourglasses += [hourglass for hourglass in \
                             evaluation.plugin_pyodel_hourglass.select()]
-    return dict(attendances=attendances, workspace=workspace,
+    return dict(courses=courses, workspace=workspace,
                 hourglasses=hourglasses, works=works,
                 sandglasses=sandglasses)
 

@@ -1,4 +1,3 @@
-{{H5("Data for debugging the sandglass")}}
 {{if result is not None:}}
   {{=H3(T("Done"))}}
   {{=P(result)}}

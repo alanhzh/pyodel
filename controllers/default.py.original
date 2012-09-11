@@ -17,87 +17,28 @@ def index():
     if you need a simple wiki simple replace the two lines below with:
     return auth.wiki()
     """
-    message = T('Explore the plugin features')
-    applicant = db((db.applicant.user==auth.user_id) & \
-                   (db.applicant.accepted==True) & \
-                   (db.applicant.notified==False)).select().first()
-    if applicant is not None:
-        message = T("Congratulations. You now belong to the managers group")
-        applicant.update_record(notified=True)
     actions = UL(LI(A(T("Student's desk"),
                       _href=URL(c="default",
-                                f="desk.html"),
-                      _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                          T("For any registered user"))),
+                                f="desk.html"))),
                  LI(A(T("Teacher's bureau"),
                       _href=URL(c="default",
-                                f="bureau.html"),
-                      _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                          T("Only those who teach shall pass"))),
+                                f="bureau.html"))),
                  LI(A(T("Manager panel"),
                       _href=URL(c="plugin_pyodel",
-                                f="panel.html"),
-                      _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                          T("If you ever managed something, you know what this is about"))),
+                                f="panel.html"))),
                  LI(A(T("Wiki"),
                       _href=URL(c="plugin_pyodel",
-                                f="wiki.html"),
-                                _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                                    T("Wikis are the new amazing web2py built-in docs system"))),
+                                f="wiki.html"))),
                  LI(A(T("Setup"),
                       _href=URL(c="plugin_pyodel",
-                                f="setup.html"),
-                                _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                                    T("Click here if you really know what you are doing"))),
+                                f="setup.html"))),
                  LI(A(T("Submit a quiz proposal"),
                       _href=URL(c="default",
-                                f="quiz.html"),
-                                _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                                    T("Please, please, do! It is as easy as yodeling without diploma"))),
-                 LI(A(T("I want to be a teacher or manager or whatever"),
-                      _href=URL(c="default",
-                                f="newmanager.html"),
-                                _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                                    T("Perhaps just being a student is not enough for you"))))
-    if auth.has_membership(role="manager"):
-        actions.append(LI(A(T("Add new managers"),
-                      _href=URL(c="default",
-                                f="addmanagers.html"),
-                                _onmouseover="jQuery('#plugin_pyodel_demo_aid').html('%s');" % \
-                                    T("You never know when you need them"))))
+                                f="quiz.html"))))
     response.flash = T("Welcome to Pyodel!")
-    return dict(message=message, actions=actions,
-                aid=H3(T("Welcome!"), _id="plugin_pyodel_demo_aid"))
+    return dict(message=T('Explore the plugin features'), actions=actions)
 
-@auth.requires_login()
-def newmanager():
-    form = crud.create(db.applicant)
-    if form.process().accepted:
-        response.flash = T("Your application has been recorded. Thanks")
-    return dict(form=form)
-
-@auth.requires_membership(role="manager")
-def addmanagers():
-    memberships = list()
-    applicants = db(db.applicant.accepted == False).select()
-    applicants_set = dict()
-    for applicant in applicants:
-        applicants_set[applicant.id] = "%(first)s %(last)s" % \
-                                           dict(first=applicant.user.first_name,
-                                                last=applicant.user.last_name)
-    form = SQLFORM.factory(Field("applicants", "list:integer",
-                           requires=IS_IN_SET(applicants_set, multiple=True)))
-    if form.process().accepted:
-        for applicant_id in form.vars.applicants:
-            applicant = db.applicant[applicant_id]
-            group = db(db.auth_group.role=="manager").select().first()
-            db.auth_membership.insert(group_id=group.id,
-                                      user_id=applicant.user)
-            applicant.update_record(accepted=True)
-            memberships.append(applicants_set[int(applicant_id)])
-        form = None
-    return dict(form=form, memberships=memberships, applicants=applicants)
-
+    
 def user():
     """
     exposes:

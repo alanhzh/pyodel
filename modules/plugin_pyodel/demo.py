@@ -247,7 +247,7 @@ c: What does it matter?, I can not even pronounce it
 m:
 
 q: Deeree (...) Doodle Dihr?
-i: No'ore o' 'tis gibberish plea'!
+i: It's second past continuous, I think
 i: That's easy: Hollereeehoooo
 c: Deeree, naturally
 i: This is the corerct one (it says so at least)

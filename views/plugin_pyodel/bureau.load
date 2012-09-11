@@ -8,7 +8,8 @@
 {{=H5(T("Gradebooks"))}}
 {{gradebook_form=SQLFORM.factory(Field("student",
                                        label=T("Student"),
-                                       requires=IS_IN_DB(db, db.auth_user, "%(first_name)s %(last_name)s (%(id)s)")),
+                                       requires=IS_IN_DB(db, db.auth_user,
+                                                         "%(first_name)s %(last_name)s (%(id)s)")),
                                  _id="plugin_pyodel_bureau_gradebook_form")}}
 {{=gradebook_form.custom.begin}}
 {{=DIV(SPAN(gradebook_form.custom.widget.student),

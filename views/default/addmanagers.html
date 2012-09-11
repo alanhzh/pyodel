@@ -1,14 +1,16 @@
 {{left_sidebar_enabled,right_sidebar_enabled=False,True}}
 {{extend 'layout.html'}}
-
-{{if 'message' in globals():}}
-<h3>{{=message}}</h3>
-{{=actions}}
-{{=HR()}}
-{{=aid}}
-{{else:}}
-{{=BEAUTIFY(response._vars)}}
+{{=H3(T("Accept new managers"))}}
+{{if len(memberships) >= 1:}}
+  {{=H5(T("New memberships added"))}}
+  {{=UL(*[LI(membership) for membership in memberships])}}
 {{pass}}
+{{=HR()}}
+{{if form is not None:}}
+  {{=form}}
+{{pass}}
+{{=H5(T("Applicant comments"))}}
+{{=UL(*[LI("%(first)s %(last)s: %(say)s" % dict(first=applicant.user.first_name, last=applicant.user.last_name, say=applicant.say)) for applicant in applicants])}}
 
 {{block right_sidebar}}
 {{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='btn',

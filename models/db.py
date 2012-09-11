@@ -93,3 +93,14 @@ pyodel_images = [
 "https://lh3.googleusercontent.com/-IZAspMKuXi0/UEvBYDxf4VI/AAAAAAAAAok/PhN4PcmaT-s/s288/yodel-class.png"]
 pyodel_image = random.choice(pyodel_images)
 
+db.define_table("applicant",
+                Field("say", label=T("Say..."),
+                      comment=T("Why you want to be a manager? (please do not put something reasonable here)"),
+                      requires=IS_NOT_EMPTY()),
+                Field("user", "reference auth_user",
+                      default=auth.user_id, writable=False),
+                Field("accepted", "boolean", default=False,
+                      readable=False, writable=False),
+                Field("notified", "boolean", default=False,
+                      writable=False, readable=False))
+

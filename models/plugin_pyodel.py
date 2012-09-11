@@ -161,9 +161,10 @@ def plugin_pyodel_get_payment(attendance=None,
     return attendee.paid
 
 def plugin_pyodel_student_format(r):
-    return "%s %s (%s)" % \
-            (db.auth_user[r.student].first_name,
-            db.auth_user[r.student].last_name, r.student)
+    return "%(first)s %(last)s (%(student)s)" % \
+        dict(first=r.student.first_name,
+             last=r.student.last_name,
+             student=r.student.id)
 
 def plugin_pyodel_set_quiz(data, deadline=True):
     """ Update a sandglass from session from quiz data."""
@@ -487,8 +488,7 @@ db.define_table("plugin_pyodel_attendance",
                 Field("allowed", "boolean", default=False),
                 Field("passed", "boolean", default=False),
                 Field("score", "double"),
-                format=plugin_pyodel_student_format
-                )
+                format=plugin_pyodel_student_format)
 
 db.define_table("plugin_pyodel_task",
                 Field("template", "boolean", default=False),
@@ -646,7 +646,6 @@ db.define_table("plugin_pyodel_gradebook",
                       "list:reference plugin_pyodel_instance"), # which instances to show/compute
                 Field("student", "reference auth_user"),
                 Field("remarks", "text"),
-                # format="%(student)s"
                 format=plugin_pyodel_student_format)
 
 def plugin_pyodel_grade_formula_compute(row):
@@ -658,7 +657,7 @@ def plugin_pyodel_grade_formula_compute(row):
 # gradebook entries for filling a gradebook grid
 db.define_table("plugin_pyodel_grade",
                 Field("gradebook",
-                      "reference plugin_pyodel_gradebook"),
+                      "reference plugin_pyodel_gradebook"), # writable=False
                 Field("score"), # A D, 10, 100%, Good , ...
                                 # used for all course score
                 Field("course",
@@ -679,8 +678,7 @@ db.define_table("plugin_pyodel_grade",
                                   # spreadsheet syntax (web2py spreadsheet.py)
                                   # references are plugin_pyodel_instance.abbreviation fields
                                   # i.e.: =fme+sme/2
-                format="%(name)s"
-                )
+                format="%(instance)s")
 
 
 # Custom validators
@@ -748,6 +746,14 @@ plugin_pyodel_show_markmin
 
 db.plugin_pyodel_stream.html.represent = lambda html, r: XML(html)
 db.plugin_pyodel_stream.body.represent = plugin_pyodel_show_markmin
+
+# Workaround for weird format/represent issue with GAE
+if request.env.web2py_runtime_gae:
+    if request.function in ["panel", "grid", "grade"]:
+        db.plugin_pyodel_gradebook.format = "%(student)s"
+        db.plugin_pyodel_grade.gradebook.requires = \
+            IS_IN_DB(db, db.auth_user,
+                     "%(first_name)s %(last_name)s (%(id)s)")
 
 response.files.append(URL(c="static", f="plugin_pyodel/pyodel.js"))
 

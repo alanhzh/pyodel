@@ -11,30 +11,20 @@
               _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % URL(c="plugin_pyodel", f="gradebook", args=["student", auth.user_id, "mode", "view"])))}}
 
 {{=H5(T("Courses"))}}
-{{=SQLTABLE(courses, columns=["plugin_pyodel_course.subject",
-                              "plugin_pyodel_course.code",
-                              "plugin_pyodel_course.name",
-                              "plugin_pyodel_course.by",
-                              "plugin_pyodel_course.starts",
-                              "plugin_pyodel_course.ends",
+{{=SQLTABLE(attendances, columns=["plugin_pyodel_attendance.course",
                               "plugin_pyodel_attendance.paid",
                               "plugin_pyodel_attendance.allowed",
                               "plugin_pyodel_attendance.passed",
                               "plugin_pyodel_attendance.score"],
-                     headers={"plugin_pyodel_course.subject":T("Subject"),
-                              "plugin_pyodel_course.code":T("Code"),
-                              "plugin_pyodel_course.name":T("Name"),
-                              "plugin_pyodel_course.by":T("By"),
-                              "plugin_pyodel_course.starts":T("Starts"),
-                              "plugin_pyodel_course.ends":T("Ends"),
+                     headers={"plugin_pyodel_attendance.course":T("Course"),
                               "plugin_pyodel_attendance.paid":T("Amount paid"),
                               "plugin_pyodel_attendance.allowed":T("allowed"),
                               "plugin_pyodel_attendance.passed":T("passed"),
                               "plugin_pyodel_attendance.score":T("score")})}}
-{{for course in courses:}}
+{{for attendee in attendances:}}
   {{button_url = URL(c="plugin_pyodel", f="course.load",
-                     args=["course", course.plugin_pyodel_course.id])}}
-  {{=SPAN(INPUT(_value=course.plugin_pyodel_course.name,
+                     args=["course", attendee.course])}}
+  {{=SPAN(INPUT(_value=db.plugin_pyodel_course[attendee.course].name,
                 _type="button",
                 _onclick="plugin_pyodel_load_workspace('%s', 'plugin_pyodel_desk_workspace');" % \
                 button_url))}}
