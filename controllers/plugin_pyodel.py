@@ -158,7 +158,7 @@ def sandglass():
 
 
 def gradebook():
-    import simplejson
+    from gluon.contrib import simplejson
     message = None
     mode = request.args(3)
     spreadsheet = None
@@ -317,7 +317,7 @@ def wiki():
 
 def gradebook_spreadsheet_update():
     """ todo: name-value replacement loop"""
-    import simplejson
+    from gluon.contrib import simplejson
     data = simplejson.loads(request.vars.data)
     processed_data = gradebook_spreadsheet_process(data)
     result = simplejson.dumps(dict(message="ok", newdata=processed_data))
@@ -381,7 +381,7 @@ def gradebook_spreadsheet_process(data):
 
 def admission():
     # give a student access to the site resources
-    import simplejson
+    from gluon.contrib import simplejson
     course = db.plugin_pyodel_course[int(request.args[1])]
     attendance = db(db.plugin_pyodel_attendance.course == course.id)
     attendees = [attendee.student.id for attendee in \
@@ -634,15 +634,19 @@ def attendance():
     db.plugin_pyodel_attendance.passed.writable = False
 
     thisyear = datetime.datetime(request.now.year, 1, 1)
-    course_query = db.plugin_pyodel_course.id > 0
-    course_query &= db.plugin_pyodel_course.starts >= thisyear
-    for attendance in db(db.plugin_pyodel_attendance.student == \
-        auth.user_id).select():
-        course_query &= db.plugin_pyodel_course.id != attendance.course
+    course_set = db(db.plugin_pyodel_course.starts >= thisyear)
 
+    attended = [int(attendee.course) for attendee in \
+                db(db.plugin_pyodel_attendance.student==\
+                   auth.user_id).select()]
+    courses = course_set.select()
+    available = dict()
+    for course in courses:
+        if not course.id in attended:
+            available[course.id] = course.name
     db.plugin_pyodel_attendance.course.requires = \
-        IS_IN_DB(db(course_query), db.plugin_pyodel_course.id, "%(name)s")
-    courses = db(course_query).select()
+        IS_IN_SET(available)
+
     form = SQLFORM(db.plugin_pyodel_attendance,
                        _id="plugin_pyodel_attendance_form")
     form.vars.student = auth.user_id

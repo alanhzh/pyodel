@@ -751,9 +751,14 @@ db.plugin_pyodel_stream.body.represent = plugin_pyodel_show_markmin
 if request.env.web2py_runtime_gae:
     if request.function in ["panel", "grid", "grade"]:
         db.plugin_pyodel_gradebook.format = "%(student)s"
+        plugin_pyodel_gradebook_format_set = dict()
+        for gradebook in db(db.plugin_pyodel_gradebook).select():
+            plugin_pyodel_gradebook_format_set[gradebook.id] = \
+                "%(first)s %(last)s (%(id)s)" % dict(first=gradebook.student.first_name,
+                                                     last=gradebook.student.last_name,
+                                                     id=gradebook.id)
         db.plugin_pyodel_grade.gradebook.requires = \
-            IS_IN_DB(db, db.auth_user,
-                     "%(first_name)s %(last_name)s (%(id)s)")
+            IS_IN_SET(plugin_pyodel_gradebook_format_set)
 
 response.files.append(URL(c="static", f="plugin_pyodel/pyodel.js"))
 

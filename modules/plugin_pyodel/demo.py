@@ -250,7 +250,7 @@ q: Deeree (...) Doodle Dihr?
 i: It's second past continuous, I think
 i: That's easy: Hollereeehoooo
 c: Deeree, naturally
-i: This is the corerct one (it says so at least)
+i: This is the correct one (it says so at least)
 
 q: Diploma Yodeling cannot be compared to ...:
 i: with a degree in Yodeling
